@@ -1,4 +1,4 @@
-module convention/v1
+module github.com/sofmon/convention/v1/go
 
 go 1.21.1
 

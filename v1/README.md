@@ -162,10 +162,10 @@ All log messages are structured as JSON objects and ends with new line (`'\n'`)
 ``` JSON
 {
     "time": "2023-10-01T01:00:00Z",
-	"level": "error",
-	"service": "message-v1",
-	"user": "josh",
-	"message": "✘ unable to connect to database"
+    "level": "error",
+    "service": "message-v1",
+    "user": "josh",
+    "message": "✘ unable to connect to database"
 }
 ```
 
@@ -174,11 +174,11 @@ If the log is part of serving an HTTP request, the metadata object contains the 
 ``` JSON
 {
     "time": "2023-10-01T01:00:00Z",
-	"level": "error",
-	"service": "message-v1",
-	"user": "josh",
-	"message": "✘ unable to connect to database"
-	"metadata": {
+    "level": "error",
+    "service": "message-v1",
+    "user": "josh",
+    "message": "✘ unable to connect to database"
+    "metadata": {
         "request_path": "/users/josh/messages",
         "request_method": "GET",
         "request_id": "a9ca2c1a-f993-420d-b851-726dafc35102"
