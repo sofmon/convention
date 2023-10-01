@@ -48,8 +48,7 @@ func wrapWithEnv(parent context.Context) (ctx Context) {
 
 	envStr, err := ConfigString("environment")
 	if err != nil {
-		ctx.LogWarn(err)
-		ctx.LogWarn("failed to get environment from config, assuming 'production'")
+		// failed to get environment from config, assuming 'production'
 		env = EnvironmentProduction
 	} else {
 		env = Environment(envStr)
