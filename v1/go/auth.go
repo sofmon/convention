@@ -9,15 +9,22 @@ import (
 )
 
 var (
-	hmacSampleSecret []byte
+	hmacSecret []byte
 )
 
-func init() {
-	var err error
-	hmacSampleSecret, err = ConfigBytes(configKeyCommSecret)
-	if err != nil {
-		panic(err)
+func getHmacSecret() ([]byte, error) {
+
+	if hmacSecret != nil {
+		return hmacSecret, nil
 	}
+
+	var err error
+	hmacSecret, err = ConfigBytes(configKeyCommSecret)
+	if err != nil {
+		return nil, err
+	}
+
+	return hmacSecret, nil
 }
 
 func DecodeHTTPRequestClaims(r *http.Request) (Claims, error) {
@@ -48,8 +55,14 @@ func EncodeHTTPRequestClaims(r *http.Request, claims Claims) error {
 }
 
 func generateToken(claims map[string]any) (string, error) {
+
+	hmac, err := getHmacSecret()
+	if err != nil {
+		return "", err
+	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims(claims))
-	tokenString, err := token.SignedString(hmacSampleSecret)
+	tokenString, err := token.SignedString(hmac)
 	if err != nil {
 		return "", err
 	}
@@ -58,12 +71,17 @@ func generateToken(claims map[string]any) (string, error) {
 
 func decodeToken(tokenString string) (Claims, error) {
 
+	hmac, err := getHmacSecret()
+	if err != nil {
+		return nil, err
+	}
+
 	token, err := jwt.Parse(tokenString,
 		func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
-			return hmacSampleSecret, nil
+			return hmac, nil
 		},
 	)
 	if err != nil {
