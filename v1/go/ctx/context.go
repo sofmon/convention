@@ -28,18 +28,18 @@ const (
 	contextKeyScope
 )
 
-type Service string
+type App string
 
-func NewContext(svc string) (ctx Context) {
-	return WrapContext(context.Background(), svc)
+func NewContext(app App) (ctx Context) {
+	return WrapContext(context.Background(), app)
 }
 
-func WrapContext(parent context.Context, service string) (ctx Context) {
+func WrapContext(parent context.Context, app App) (ctx Context) {
 	return wrapWithEnv(
 		context.WithValue(
 			parent,
 			contextKeyService,
-			Service(service),
+			app,
 		),
 	)
 }
@@ -67,9 +67,9 @@ func wrapWithEnv(parent context.Context) (ctx Context) {
 	return
 }
 
-func (ctx Context) Service() Service {
-	svc, _ := ctx.Value(contextKeyService).(Service)
-	return svc
+func (ctx Context) App() App {
+	app, _ := ctx.Value(contextKeyService).(App)
+	return app
 }
 
 /*
@@ -207,7 +207,7 @@ func (ctx Context) HandleFunc(f func(c Context, w http.ResponseWriter, r *http.R
 		trace(
 			traceEntry{
 				Time:       ctx.Now(),
-				Service:    ctx.Service(),
+				App:        ctx.App(),
 				User:       ctx.User(),
 				RequestID:  ctx.RequestID(),
 				Method:     r.Method,
@@ -362,12 +362,18 @@ func (ctx Context) LogInfof(format string, a ...any) {
 
 func (ctx Context) logMsg(level logLevel, v any) {
 	entry := logEntry{
-		Time:    ctx.Now(),
-		Level:   level,
-		Service: ctx.Service(),
-		User:    ctx.User(),
-		Message: v,
+		Time:  ctx.Now(),
+		Level: level,
+		App:   ctx.App(),
+		User:  ctx.User(),
 	}
+
+	if err, ok := v.(error); ok {
+		entry.Message = err.Error()
+	} else {
+		entry.Message = v
+	}
+
 	if r := ctx.Request(); r != nil {
 		entry.Metadata = metadata{
 			"request_path":   r.URL.Path,
