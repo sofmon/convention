@@ -1,4 +1,4 @@
-package convention
+package ctx
 
 import "net/http"
 
@@ -8,7 +8,7 @@ const (
 	httpHeaderAuthorization = "Authorization"
 	httpHeaderRequestID     = "Request-Id"
 
-	HTTPHeaderWithNowTimeAs = "With-Now-Time-As"
+	HTTPHeaderTimeNow = "Time-Now"
 )
 
 type HttpHandler struct {

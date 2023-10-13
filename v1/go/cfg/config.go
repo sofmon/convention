@@ -1,4 +1,4 @@
-package convention
+package cfg
 
 import (
 	"encoding/json"
@@ -10,10 +10,7 @@ import (
 type ConfigKey string
 
 const (
-	ConfigKeyAppConfig ConfigKey = "app-config"
-
-	configKeyCommSecret ConfigKey = "communication_secret"
-	configKeyDatabase   ConfigKey = "database"
+	ConfigKeyAppConfig = "app-config"
 )
 
 var configLocation = "/etc/app/"
@@ -36,11 +33,11 @@ func SetConfigLocation(folder string) error {
 	return nil
 }
 
-func ConfigFilePath(key ConfigKey) string {
+func FilePath(key ConfigKey) string {
 	return configLocation + string(key)
 }
 
-func ConfigBytes(key ConfigKey) (value []byte, err error) {
+func Bytes(key ConfigKey) (value []byte, err error) {
 	file := configLocation + string(key)
 	value, err = os.ReadFile(file)
 	if err != nil {
@@ -49,16 +46,16 @@ func ConfigBytes(key ConfigKey) (value []byte, err error) {
 	return
 }
 
-func ConfigBytesOrPanic(key ConfigKey) (res []byte) {
-	res, err := ConfigBytes(key)
+func BytesOrPanic(key ConfigKey) (res []byte) {
+	res, err := Bytes(key)
 	if err != nil {
 		panic(err)
 	}
 	return
 }
 
-func ConfigString(key ConfigKey) (value string, err error) {
-	raw, err := ConfigBytes(key)
+func String(key ConfigKey) (value string, err error) {
+	raw, err := Bytes(key)
 	if err != nil {
 		return "", err
 	}
@@ -66,16 +63,16 @@ func ConfigString(key ConfigKey) (value string, err error) {
 	return
 }
 
-func ConfigStringOrPanic(key ConfigKey) (res string) {
-	res, err := ConfigString(key)
+func StringOrPanic(key ConfigKey) (res string) {
+	res, err := String(key)
 	if err != nil {
 		panic(err)
 	}
 	return
 }
 
-func ConfigObject[T any](key ConfigKey) (res T, err error) {
-	bytes, err := ConfigBytes(key)
+func Object[T any](key ConfigKey) (res T, err error) {
+	bytes, err := Bytes(key)
 	if err != nil {
 		return
 	}
@@ -86,8 +83,8 @@ func ConfigObject[T any](key ConfigKey) (res T, err error) {
 	return
 }
 
-func ConfigObjectOrPanic[T any](key ConfigKey) (res T) {
-	bytes, err := ConfigBytes(key)
+func ObjectOrPanic[T any](key ConfigKey) (res T) {
+	bytes, err := Bytes(key)
 	if err != nil {
 		panic(err)
 	}

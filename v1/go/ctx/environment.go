@@ -1,4 +1,4 @@
-package convention
+package ctx
 
 type Environment string
 

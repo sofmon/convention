@@ -1,6 +1,6 @@
 # Convention
 
-Convention over configuration (Coc) definition and recommended implementation for applications build within the Sofmon group.
+Convention over configuration (CoC) definition and recommended implementation for applications build within the Sofmon group.
 
 See documentation for [convention v1](./v1/).
 

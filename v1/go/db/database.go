@@ -1,4 +1,4 @@
-package convention
+package db
 
 import (
 	"database/sql"
@@ -10,17 +10,21 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	convCfg "github.com/sofmon/convention/v1/go/cfg"
 )
 
-type DBEngine string
+type Engine string
 
 const (
-	DBEnginePostgres DBEngine = "postgres"
+	EnginePostgres Engine = "postgres"
+
+	configKeyDatabase convCfg.ConfigKey = "database"
 )
 
-type DBVersion string
+type Version string
 
-type dbConnection struct {
+type connection struct {
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
 	Database string `json:"database"`
@@ -28,17 +32,17 @@ type dbConnection struct {
 	Password string `json:"password"`
 }
 
-type dbConnections struct {
-	Default *dbConnection  `json:"default,omitempty"`
-	Shards  []dbConnection `json:"shards,omitempty"`
+type connections struct {
+	Default *connection  `json:"default,omitempty"`
+	Shards  []connection `json:"shards,omitempty"`
 }
 
-type dbConfig struct {
-	Engine   DBEngine                    `json:"engine"`
-	Versions map[DBVersion]dbConnections `json:"versions"`
+type config struct {
+	Engine   Engine                  `json:"engine"`
+	Versions map[Version]connections `json:"versions"`
 }
 
-func (conn dbConnection) Open() (*sql.DB, error) {
+func (conn connection) Open() (*sql.DB, error) {
 	return sql.Open(
 		"postgres",
 		fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=require",
@@ -47,14 +51,14 @@ func (conn dbConnection) Open() (*sql.DB, error) {
 	)
 }
 
-func DBOpen(version DBVersion) (err error) {
+func Open(version Version) (err error) {
 
-	fullCfg, err := ConfigObject[dbConfig](configKeyDatabase)
+	fullCfg, err := convCfg.Object[config](configKeyDatabase)
 	if err != nil {
 		return
 	}
 
-	if fullCfg.Engine != DBEnginePostgres {
+	if fullCfg.Engine != EnginePostgres {
 		return fmt.Errorf("database implementation does not support engine '%s'", fullCfg.Engine)
 	}
 
@@ -81,7 +85,7 @@ func DBOpen(version DBVersion) (err error) {
 	return
 }
 
-func DBClose() (err error) {
+func Close() (err error) {
 	if defaultDB != nil {
 		err = defaultDB.Close()
 	}
@@ -108,14 +112,14 @@ func indexByShardKey(key string, count int) int {
 	return int(crc32.ChecksumIEEE([]byte(key)) % uint32(count))
 }
 
-func DBDefault() *sql.DB {
+func Default() *sql.DB {
 	if defaultDB == nil {
 		panic(ErrNoDBDefault)
 	}
 	return defaultDB
 }
 
-func DBShards() []*sql.DB {
+func Shards() []*sql.DB {
 	if len(shardDBs) <= 0 {
 		panic(ErrNoDBShards)
 	}
@@ -147,13 +151,17 @@ func dbsByShardKeys(keys ...string) (res []*sql.DB) {
 	return
 }
 
-type DBObject[idT, shardKeyT ~string] interface {
-	ID() idT
-	ShardKey() shardKeyT
-	CreatedAt() time.Time
-	CreatedBy() string
-	UpdatedAt() time.Time
-	UpdatedBy() string
+type Trail[idT, shardKeyT ~string] struct {
+	ID        idT
+	ShardKey  shardKeyT
+	CreatedAt time.Time
+	CreatedBy string
+	UpdatedAt time.Time
+	UpdatedBy string
+}
+
+type Object[idT, shardKeyT ~string] interface {
+	Trail() Trail[idT, shardKeyT]
 }
 
 type dbTable struct {
@@ -192,7 +200,7 @@ func dbsForShardKeys[shardKeyT ~string](sks ...shardKeyT) []*sql.DB {
 		return []*sql.DB{dbByShardKey(string(sks[0]))}
 
 	case 0:
-		return DBShards()
+		return Shards()
 
 	default:
 		sksStr := make([]string, len(sks))
@@ -205,7 +213,7 @@ func dbsForShardKeys[shardKeyT ~string](sks ...shardKeyT) []*sql.DB {
 
 }
 
-func DBRegisterObject[objT DBObject[idT, shardKeyT], idT ~string, shardKeyT ~string](sharding bool) (err error) {
+func RegisterObject[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](sharding bool) (err error) {
 
 	objType := reflect.TypeOf(new(objT))
 	objTypeName := objType.Name()
@@ -231,14 +239,14 @@ object JSONB NULL
 );`
 
 	if sharding {
-		for _, shard := range DBShards() {
+		for _, shard := range Shards() {
 			_, err = shard.Exec(createScript)
 			if err != nil {
 				return
 			}
 		}
 	} else {
-		_, err = DBDefault().Exec(createScript)
+		_, err = Default().Exec(createScript)
 		if err != nil {
 			return
 		}
@@ -255,21 +263,31 @@ object JSONB NULL
 	return
 }
 
-func DBInsertObject[objT DBObject[idT, shardKeyT], idT ~string, shardKeyT ~string](obj objT) (err error) {
+func NewObjectSet[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string]() ObjectSet[objT, idT, shardKeyT] {
+	return ObjectSet[objT, idT, shardKeyT]{
+		objType: reflect.TypeOf(new(objT)),
+	}
+}
 
-	objType := reflect.TypeOf(obj)
+type ObjectSet[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
+	objType reflect.Type
+}
 
-	table, ok := typeToTable[objType]
+func (os ObjectSet[objT, idT, shardKeyT]) Insert(obj objT) (err error) {
+
+	table, ok := typeToTable[os.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
 	}
 
+	trail := obj.Trail()
+
 	var db *sql.DB
 	if table.Sharding {
-		db = dbByShardKey(string(obj.ShardKey()))
+		db = dbByShardKey(string(trail.ShardKey))
 	} else {
-		db = DBDefault()
+		db = Default()
 	}
 
 	tx, err := db.Begin()
@@ -295,13 +313,13 @@ func DBInsertObject[objT DBObject[idT, shardKeyT], idT ~string, shardKeyT ~strin
 	_, err = tx.Exec(`INSERT INTO "`+table.RuntimeTableName+`"
 ("id","created_at","created_by","updated_at","updated_by","object")
 VALUES($1,$2,$3,$4,$5,$6)`,
-		obj.ID(), obj.CreatedAt(), obj.CreatedBy(), obj.UpdatedAt(), obj.UpdatedBy(), bytes)
+		trail.ID, trail.CreatedAt, trail.CreatedBy, trail.UpdatedAt, trail.UpdatedBy, bytes)
 	if err != nil {
 		return
 	}
 
 	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT * FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
-		obj.ID())
+		trail.ID)
 	if err != nil {
 		return
 	}
@@ -309,21 +327,21 @@ VALUES($1,$2,$3,$4,$5,$6)`,
 	return
 }
 
-func DBUpdateObject[objT DBObject[idT, shardKeyT], idT ~string, shardKeyT ~string](obj objT) (err error) {
+func (os ObjectSet[objT, idT, shardKeyT]) Update(obj objT) (err error) {
 
-	objType := reflect.TypeOf(obj)
-
-	table, ok := typeToTable[objType]
+	table, ok := typeToTable[os.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
 	}
 
+	trail := obj.Trail()
+
 	var db *sql.DB
 	if table.Sharding {
-		db = dbByShardKey(string(obj.ShardKey()))
+		db = dbByShardKey(string(trail.ShardKey))
 	} else {
-		db = DBDefault()
+		db = Default()
 	}
 
 	tx, err := db.Begin()
@@ -347,13 +365,13 @@ func DBUpdateObject[objT DBObject[idT, shardKeyT], idT ~string, shardKeyT ~strin
 	}
 
 	_, err = tx.Exec(`UPDATE "`+table.RuntimeTableName+`" SET "object"=$1, "updated_at"=$2, "updated_by"=$3 WHERE "id"=$4`,
-		bytes, obj.UpdatedAt(), obj.UpdatedBy(), obj.ID())
+		bytes, trail.UpdatedAt, trail.UpdatedBy, trail.ID)
 	if err != nil {
 		return
 	}
 
 	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT * FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
-		obj.ID())
+		trail.ID)
 	if err != nil {
 		return
 	}
@@ -361,21 +379,21 @@ func DBUpdateObject[objT DBObject[idT, shardKeyT], idT ~string, shardKeyT ~strin
 	return
 }
 
-func DBUpsertObject[objT DBObject[idT, shardKeyT], idT ~string, shardKeyT ~string](obj objT) (err error) {
+func (os ObjectSet[objT, idT, shardKeyT]) Upsert(obj objT) (err error) {
 
-	objType := reflect.TypeOf(obj)
-
-	table, ok := typeToTable[objType]
+	table, ok := typeToTable[os.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
 	}
 
+	trail := obj.Trail()
+
 	var db *sql.DB
 	if table.Sharding {
-		db = dbByShardKey(string(obj.ShardKey()))
+		db = dbByShardKey(string(trail.ShardKey))
 	} else {
-		db = DBDefault()
+		db = Default()
 	}
 
 	tx, err := db.Begin()
@@ -403,13 +421,13 @@ func DBUpsertObject[objT DBObject[idT, shardKeyT], idT ~string, shardKeyT ~strin
 VALUES($1,$2,$3,$4,$5,$6)
 ON CONFLICT ("id")
 DO UPDATE SET "updated_at"=$4,"updated_by"=$5,"object"=$6`,
-		obj.ID(), obj.CreatedAt(), obj.CreatedBy(), obj.UpdatedAt(), obj.UpdatedBy(), bytes)
+		trail.ID, trail.CreatedAt, trail.CreatedBy, trail.UpdatedAt, trail.UpdatedBy, bytes)
 	if err != nil {
 		return
 	}
 
 	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT * FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
-		obj.ID())
+		trail.ID)
 	if err != nil {
 		return
 	}
@@ -417,11 +435,9 @@ DO UPDATE SET "updated_at"=$4,"updated_by"=$5,"object"=$6`,
 	return
 }
 
-func DBSelectObject[objT DBObject[idT, shardKeyT], idT ~string, shardKeyT ~string](id idT, shardKeys ...shardKeyT) (obj objT, err error) {
+func (os ObjectSet[objT, idT, shardKeyT]) SelectByID(id idT, shardKeys ...shardKeyT) (obj objT, err error) {
 
-	objType := reflect.TypeOf(obj)
-
-	table, ok := typeToTable[objType]
+	table, ok := typeToTable[os.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
@@ -436,7 +452,7 @@ func DBSelectObject[objT DBObject[idT, shardKeyT], idT ~string, shardKeyT ~strin
 	if table.Sharding {
 		dbs = dbsForShardKeys(shardKeys...)
 	} else {
-		dbs = []*sql.DB{DBDefault()}
+		dbs = []*sql.DB{Default()}
 	}
 
 	for _, db := range dbs {
@@ -463,11 +479,9 @@ func DBSelectObject[objT DBObject[idT, shardKeyT], idT ~string, shardKeyT ~strin
 	return
 }
 
-func DBSelectObjects[objT DBObject[idT, shardKeyT], idT ~string, shardKeyT ~string](where string, params ...any) (obs []objT, err error) {
+func (os ObjectSet[objT, idT, shardKeyT]) Select(where string, params ...any) (obs []objT, err error) {
 
-	objType := reflect.TypeOf(new(objT))
-
-	table, ok := typeToTable[objType]
+	table, ok := typeToTable[os.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
@@ -475,9 +489,9 @@ func DBSelectObjects[objT DBObject[idT, shardKeyT], idT ~string, shardKeyT ~stri
 
 	var dbs []*sql.DB
 	if table.Sharding {
-		dbs = DBShards()
+		dbs = Shards()
 	} else {
-		dbs = []*sql.DB{DBDefault()}
+		dbs = []*sql.DB{Default()}
 	}
 
 	for _, db := range dbs {

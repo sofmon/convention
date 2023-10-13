@@ -1,4 +1,4 @@
-package convention
+package ctx
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 	"net/http/httputil"
 	"strings"
 	"time"
+
+	convCfg "github.com/sofmon/convention/v1/go/cfg"
 )
 
 type Context struct {
@@ -46,7 +48,7 @@ func wrapWithEnv(parent context.Context) (ctx Context) {
 
 	var env Environment
 
-	envStr, err := ConfigString("environment")
+	envStr, err := convCfg.String("environment")
 	if err != nil {
 		// failed to get environment from config, assuming 'production'
 		env = EnvironmentProduction
@@ -278,13 +280,13 @@ func (ctx Context) Now() time.Time {
 
 		if r != nil {
 
-			nowStr := r.Header.Get(HTTPHeaderWithNowTimeAs)
+			nowStr := r.Header.Get(HTTPHeaderTimeNow)
 
 			if nowStr != "" {
 
 				now, err := time.Parse(time.RFC3339, nowStr)
 				if err != nil {
-					ctx.LogWarnf("failed to parse %s header: %s", HTTPHeaderWithNowTimeAs, err.Error())
+					ctx.LogWarnf("failed to parse %s header: %s", HTTPHeaderTimeNow, err.Error())
 					return time.Now().UTC()
 				}
 

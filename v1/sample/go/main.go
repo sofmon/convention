@@ -3,52 +3,52 @@ package main
 import (
 	"net/http"
 
-	conv "github.com/sofmon/convention/v1/go"
+	convAPI "github.com/sofmon/convention/v1/go/api"
+	convCtx "github.com/sofmon/convention/v1/go/ctx"
+	convDB "github.com/sofmon/convention/v1/go/db"
+)
+
+var (
+	users = convDB.NewObjectSet[User]()
 )
 
 func main() {
 
-	ctx := conv.NewContext("sample-v1")
+	ctx := convCtx.NewContext("sample-v1")
 
 	// Ensure the postgresql docker container is running as described in the README.md file:
 	// $ docker-compose up -d postgresql
-	err := conv.DBOpen("v1")
+	err := convDB.Open("v1")
 	if err != nil {
 		ctx.LogError(err)
 		return
 	}
-	defer conv.DBClose()
+	defer convDB.Close()
 
-	err = conv.DBRegisterObject[User](true)
+	err = convDB.RegisterObject[User](true)
 	if err != nil {
 		ctx.LogError(err)
 		return
 	}
 
-	http.HandleFunc("/",
-		ctx.HandleFunc(
-			func(ctx conv.Context, w http.ResponseWriter, r *http.Request) {
+	err = convAPI.ListenAndServe(
+		ctx,
+		convAPI.Endpoints{
+			"/users/%s/": func(ctx convCtx.Context, w http.ResponseWriter, r *http.Request, params ...string) {
 
 				// ctx is now populated with request information
 
 				return
 			},
-		),
-	)
-
-	err = http.ListenAndServeTLS(":443",
-		conv.ConfigFilePath("communication_certificate"),
-		conv.ConfigFilePath("communication_key"),
-		nil,
+		},
 	)
 	if err != nil {
 		ctx.LogError(err)
 		return
 	}
-
 }
 
 var (
 	// Endpoint to the v1/sample/go/communication/endpoint.go
-	endpoint = conv.NewEndpoint[any, any]("https://localhost/sample/v1/")
+	endpoint = convAPI.NewEndpoint[any, any]("https://localhost/sample/v1/")
 )

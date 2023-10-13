@@ -1,9 +1,11 @@
-package convention
+package ctx
 
 import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	convCfg "github.com/sofmon/convention/v1/go/cfg"
 
 	jwt "github.com/golang-jwt/jwt/v4"
 )
@@ -19,7 +21,7 @@ func getHmacSecret() ([]byte, error) {
 	}
 
 	var err error
-	hmacSecret, err = ConfigBytes(configKeyCommSecret)
+	hmacSecret, err = convCfg.Bytes("communication_secret")
 	if err != nil {
 		return nil, err
 	}
@@ -31,12 +33,12 @@ func DecodeHTTPRequestClaims(r *http.Request) (Claims, error) {
 
 	authHeader := r.Header.Get(httpHeaderAuthorization)
 	if authHeader == "" {
-		return nil, ErrNoAuthorizationHeader
+		return nil, ErrMissingAuthorizationHeader
 	}
 
 	authSplit := strings.Split(authHeader, " ")
 	if len(authSplit) != 2 || authSplit[0] != "Bearer" {
-		return nil, ErrNoAuthorizationHeader
+		return nil, ErrMissingAuthorizationHeader
 	}
 
 	return decodeToken(authSplit[1])
@@ -89,12 +91,12 @@ func decodeToken(tokenString string) (Claims, error) {
 	}
 
 	if !token.Valid {
-		return nil, ErrInvalidToken
+		return nil, ErrInvalidAuthorizationToken
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok || claims == nil {
-		return nil, ErrInvalidToken
+		return nil, ErrInvalidAuthorizationToken
 	}
 
 	return Claims(claims), nil

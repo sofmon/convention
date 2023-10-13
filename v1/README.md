@@ -36,6 +36,7 @@ HTTP Method defines expectation on request and response body communication as sh
 |---|---|---|
 |`GET`|-|JSON|
 |`PUT`|JSON|-|
+|`DELETE`|-|-|
 |`POST`|JSON|JSON|
 
 HTTP Status Code indicates the success of an operation:

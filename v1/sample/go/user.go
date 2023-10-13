@@ -2,34 +2,28 @@ package main
 
 import (
 	"time"
+
+	convDB "github.com/sofmon/convention/v1/go/db"
 )
 
 type UserID string
 
 type User struct {
-	UserID UserID
+	UserID    UserID
+	Name      string
+	CreatedAt time.Time
+	CreatedBy string
+	UpdatedAt time.Time
+	UpdatedBy string
 }
 
-func (u User) ID() UserID {
-	return u.UserID
-}
-
-func (u User) ShardKey() UserID {
-	return u.UserID
-}
-
-func (u User) CreatedAt() time.Time {
-	return time.Now().UTC()
-}
-
-func (u User) CreatedBy() string {
-	return ""
-}
-
-func (u User) UpdatedAt() time.Time {
-	return time.Now().UTC()
-}
-
-func (u User) UpdatedBy() string {
-	return ""
+func (u User) Trail() convDB.Trail[UserID, UserID] {
+	return convDB.Trail[UserID, UserID]{
+		ID:        u.UserID,
+		ShardKey:  u.UserID,
+		CreatedAt: u.CreatedAt,
+		CreatedBy: u.CreatedBy,
+		UpdatedAt: u.UpdatedAt,
+		UpdatedBy: u.UpdatedBy,
+	}
 }
