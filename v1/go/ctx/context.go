@@ -3,10 +3,7 @@ package ctx
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
-	"net/http/httptest"
-	"net/http/httputil"
 	"strings"
 	"time"
 
@@ -143,83 +140,6 @@ func (ctx Context) RequestClaims() (claims Claims) {
 	return obj.(Claims)
 }
 
-func (ctx Context) HandleFunc(f func(c Context, w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-
-		ctx := ctx.WithRequest(r)
-
-		rec := httptest.NewRecorder()
-
-		authHeader := r.Header.Get(httpHeaderAuthorization)
-		if authHeader != "" {
-			l := len(authHeader) - 10
-			if l < 0 {
-				l = len(authHeader)
-			}
-			r.Header.Set(httpHeaderAuthorization, "..."+authHeader[l:])
-		}
-
-		hasBody := r.Method == http.MethodPost || r.Method == http.MethodPut
-
-		reqDump, err := httputil.DumpRequest(r, hasBody)
-		if err != nil {
-			ctx.LogWarn(err)
-			return
-		}
-
-		if authHeader != "" {
-			r.Header.Set("Authorization", authHeader)
-		}
-
-		f(ctx, rec, r)
-
-		res := rec.Result()
-
-		hasBody = res.StatusCode != http.StatusNoContent
-
-		resDump, err := httputil.DumpResponse(res, hasBody)
-		if err != nil {
-			ctx.LogWarn(err)
-			return
-		}
-
-		for k, v := range res.Header {
-			for _, vv := range v {
-				w.Header().Add(k, vv)
-			}
-		}
-
-		w.WriteHeader(res.StatusCode)
-
-		if hasBody {
-			resBody, err := io.ReadAll(res.Body)
-			if err != nil {
-				ctx.LogWarn(err)
-				return
-			}
-			_, err = w.Write(resBody)
-			if err != nil {
-				ctx.LogWarn(err)
-				return
-			}
-		}
-
-		trace(
-			traceEntry{
-				Time:       ctx.Now(),
-				App:        ctx.App(),
-				User:       ctx.User(),
-				RequestID:  ctx.RequestID(),
-				Method:     r.Method,
-				Path:       r.URL.Path,
-				StatusCode: res.StatusCode,
-				Request:    string(reqDump),
-				Response:   string(resDump),
-			},
-		)
-	}
-}
-
 /*
 	Scope
 */
@@ -320,16 +240,16 @@ func (ctx Context) IsAdmin() bool {
 	return claims.IsAdmin()
 }
 
-func (ctx Context) IsService() bool {
+func (ctx Context) IsSystem() bool {
 	claims := ctx.RequestClaims()
 	if claims == nil {
 		return false
 	}
-	return claims.IsService()
+	return claims.IsSystem()
 }
 
-func (ctx Context) IsAdminOrService() bool {
-	return ctx.IsAdmin() || ctx.IsService()
+func (ctx Context) IsAdminOrSystem() bool {
+	return ctx.IsAdmin() || ctx.IsSystem()
 }
 
 /*

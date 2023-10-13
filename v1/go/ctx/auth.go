@@ -1,6 +1,7 @@
 package ctx
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -12,6 +13,9 @@ import (
 
 var (
 	hmacSecret []byte
+
+	ErrMissingAuthorizationHeader = errors.New("HTTP request has no valid Bearer authentication; expecting header like 'Authorization: Bearer <token>'")
+	ErrInvalidAuthorizationToken  = errors.New("HTTP request has invalid bearer token'")
 )
 
 func getHmacSecret() ([]byte, error) {
@@ -105,16 +109,16 @@ func decodeToken(tokenString string) (Claims, error) {
 type Claims map[string]any
 
 const (
-	claimUser      = "user"
-	claimIsAdmin   = "admin"
-	claimIsService = "service"
+	claimUser     = "user"
+	claimIsAdmin  = "admin"
+	claimIsSystem = "system"
 )
 
-func NewClaims(user string, isAdmin, isService bool) Claims {
+func NewClaims(user string, isAdmin, isSystem bool) Claims {
 	return Claims{
-		claimUser:      user,
-		claimIsAdmin:   isAdmin,
-		claimIsService: isService,
+		claimUser:     user,
+		claimIsAdmin:  isAdmin,
+		claimIsSystem: isSystem,
 	}
 }
 
@@ -146,8 +150,8 @@ func (c Claims) IsAdmin() bool {
 	return adminUser
 }
 
-func (c Claims) IsService() bool {
-	serviceUserAny, ok := c[claimIsService]
+func (c Claims) IsSystem() bool {
+	serviceUserAny, ok := c[claimIsSystem]
 	if !ok {
 		return false
 	}
@@ -160,6 +164,6 @@ func (c Claims) IsService() bool {
 	return serviceUser
 }
 
-func (c Claims) IsAdminOrService() bool {
-	return c.IsAdmin() || c.IsService()
+func (c Claims) IsAdminOrSystem() bool {
+	return c.IsAdmin() || c.IsSystem()
 }

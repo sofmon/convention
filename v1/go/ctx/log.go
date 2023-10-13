@@ -34,24 +34,3 @@ func log(e logEntry) {
 		fmt.Println(string(out))
 	}
 }
-
-type traceEntry struct {
-	Time       time.Time `json:"time,omitempty"`
-	App        App       `json:"app,omitempty"`
-	User       string    `json:"user,omitempty"`
-	RequestID  RequestID `json:"request_id,omitempty"`
-	Method     string    `json:"method,omitempty"`
-	Path       string    `json:"path,omitempty"`
-	StatusCode int       `json:"status_code,omitempty"`
-	Request    string    `json:"request,omitempty"`
-	Response   string    `json:"response,omitempty"`
-}
-
-func trace(e traceEntry) {
-	out, err := json.Marshal(e)
-	if err != nil {
-		fmt.Printf("%v\n", e)
-	} else {
-		fmt.Println(string(out))
-	}
-}
