@@ -106,7 +106,7 @@ func (ctx Context) WithRequest(r *http.Request) (res Context) {
 		}
 	}
 
-	if claims, err := DecodeHTTPRequestClaims(r); err != nil {
+	if claims, err := DecodeHTTPRequestClaims(r); err == nil {
 		res = Context{
 			context.WithValue(
 				res.Context,
