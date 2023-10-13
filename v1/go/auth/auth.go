@@ -1,4 +1,4 @@
-package ctx
+package auth
 
 import (
 	"errors"
@@ -6,9 +6,13 @@ import (
 	"net/http"
 	"strings"
 
-	convCfg "github.com/sofmon/convention/v1/go/cfg"
-
 	jwt "github.com/golang-jwt/jwt/v4"
+
+	convCfg "github.com/sofmon/convention/v1/go/cfg"
+)
+
+const (
+	HttpHeaderAuthorization = "Authorization"
 )
 
 var (
@@ -35,7 +39,7 @@ func getHmacSecret() ([]byte, error) {
 
 func DecodeHTTPRequestClaims(r *http.Request) (Claims, error) {
 
-	authHeader := r.Header.Get(httpHeaderAuthorization)
+	authHeader := r.Header.Get(HttpHeaderAuthorization)
 	if authHeader == "" {
 		return nil, ErrMissingAuthorizationHeader
 	}
@@ -55,7 +59,7 @@ func EncodeHTTPRequestClaims(r *http.Request, claims Claims) error {
 		return err
 	}
 
-	r.Header.Set(httpHeaderAuthorization, "Bearer "+token)
+	r.Header.Set(HttpHeaderAuthorization, "Bearer "+token)
 
 	return nil
 }
@@ -104,66 +108,4 @@ func decodeToken(tokenString string) (Claims, error) {
 	}
 
 	return Claims(claims), nil
-}
-
-type Claims map[string]any
-
-const (
-	claimUser     = "user"
-	claimIsAdmin  = "admin"
-	claimIsSystem = "system"
-)
-
-func NewClaims(user string, isAdmin, isSystem bool) Claims {
-	return Claims{
-		claimUser:     user,
-		claimIsAdmin:  isAdmin,
-		claimIsSystem: isSystem,
-	}
-}
-
-func (c Claims) User() string {
-	userAny, ok := c[claimUser]
-	if !ok {
-		return ""
-	}
-
-	user, ok := userAny.(string)
-	if !ok {
-		return ""
-	}
-
-	return user
-}
-
-func (c Claims) IsAdmin() bool {
-	adminUserAny, ok := c[claimIsAdmin]
-	if !ok {
-		return false
-	}
-
-	adminUser, ok := adminUserAny.(bool)
-	if !ok {
-		return false
-	}
-
-	return adminUser
-}
-
-func (c Claims) IsSystem() bool {
-	serviceUserAny, ok := c[claimIsSystem]
-	if !ok {
-		return false
-	}
-
-	serviceUser, ok := serviceUserAny.(bool)
-	if !ok {
-		return false
-	}
-
-	return serviceUser
-}
-
-func (c Claims) IsAdminOrSystem() bool {
-	return c.IsAdmin() || c.IsSystem()
 }
