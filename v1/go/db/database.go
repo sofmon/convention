@@ -217,27 +217,28 @@ func dbsForShardKeys[shardKeyT ~string](sks ...shardKeyT) []*sql.DB {
 
 func RegisterObject[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](sharding bool) (err error) {
 
-	objType := reflect.TypeOf(new(objT))
+	obj := new(objT)
+	objType := reflect.TypeOf(*obj)
 	objTypeName := objType.Name()
 
 	runtimeTableName := toSnakeCase(objType.Name())
 	historyTableName := runtimeTableName + historySuffix
 
 	createScript := `CREATE TABLE IF NOT EXISTS "` + runtimeTableName + `" (
-id text PRIMARY KEY,
-created_at timestamp DEFAULT now(),
-created_by text NOT NULL,
-updated_at timestamp DEFAULT now(),
-updated_by text NOT NULL,
-object JSONB NULL
+"id" text PRIMARY KEY,
+"created_at" timestamp DEFAULT now(),
+"created_by" text NOT NULL,
+"updated_at" timestamp DEFAULT now(),
+"updated_by" text NOT NULL,
+"object" JSONB NULL
 );
 CREATE TABLE IF NOT EXISTS "` + historyTableName + `" (
-id text NOT NULL,
-created_at timestamp DEFAULT now(),
-created_by text NOT NULL,
-updated_at timestamp DEFAULT now(),
-updated_by text NOT NULL,
-object JSONB NULL
+"id" text NOT NULL,
+"created_at" timestamp DEFAULT now(),
+"created_by" text NOT NULL,
+"updated_at" timestamp DEFAULT now(),
+"updated_by" text NOT NULL,
+"object" JSONB NULL
 );`
 
 	if sharding {
@@ -266,8 +267,10 @@ object JSONB NULL
 }
 
 func NewObjectSet[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string]() ObjectSet[objT, idT, shardKeyT] {
+	obj := new(objT)
+	objType := reflect.TypeOf(*obj)
 	return ObjectSet[objT, idT, shardKeyT]{
-		objType: reflect.TypeOf(new(objT)),
+		objType: objType,
 	}
 }
 
