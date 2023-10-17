@@ -39,24 +39,21 @@ func (ep Endpoint[reqT, resT]) Get(ctx convCtx.Context, params ...any) (res resT
 		return
 	}
 
-	if rsp.StatusCode < 200 || rsp.StatusCode >= 300 {
-
-		var body []byte
-		body, err = io.ReadAll(rsp.Body)
-		if err != nil {
-			return
-		}
-
-		err = fmt.Errorf("unexpected status code: %d, body: %s", rsp.StatusCode, string(body))
+	body, err := io.ReadAll(rsp.Body)
+	if err != nil {
 		return
 	}
 
-	if rsp.StatusCode == http.StatusNoContent {
-		return // no body to process
+	if rsp.StatusCode == http.StatusConflict {
+		var apiErr Error
+		if e := json.Unmarshal(body, &apiErr); e == nil {
+			err = apiErr
+			return
+		}
 	}
 
-	body, err := io.ReadAll(rsp.Body)
-	if err != nil {
+	if rsp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("unexpected status code: %d, body: %s", rsp.StatusCode, string(body))
 		return
 	}
 
@@ -92,18 +89,24 @@ func (ep Endpoint[reqT, resT]) Put(ctx convCtx.Context, obj reqT, params ...any)
 		return
 	}
 
-	if rsp.StatusCode < 200 || rsp.StatusCode >= 300 {
+	if rsp.StatusCode == http.StatusOK {
+		return // no body to process
+	}
 
-		var body []byte
-		body, err = io.ReadAll(rsp.Body)
-		if err != nil {
-			return
-		}
-
-		err = fmt.Errorf("unexpected status code: %d, body: %s", rsp.StatusCode, string(body))
+	body, err = io.ReadAll(rsp.Body)
+	if err != nil {
 		return
 	}
 
+	if rsp.StatusCode == http.StatusConflict {
+		var apiErr Error
+		if e := json.Unmarshal(body, &apiErr); e == nil {
+			err = apiErr
+			return
+		}
+	}
+
+	err = fmt.Errorf("unexpected status code: %d, body: %s", rsp.StatusCode, string(body))
 	return
 }
 
@@ -129,24 +132,21 @@ func (ep Endpoint[reqT, resT]) Post(ctx convCtx.Context, obj reqT, params ...any
 		return
 	}
 
-	if rsp.StatusCode < 200 || rsp.StatusCode >= 300 {
-
-		var body []byte
-		body, err = io.ReadAll(rsp.Body)
-		if err != nil {
-			return
-		}
-
-		err = fmt.Errorf("unexpected status code: %d, body: %s", rsp.StatusCode, string(body))
+	body, err = io.ReadAll(rsp.Body)
+	if err != nil {
 		return
 	}
 
-	if rsp.StatusCode == http.StatusNoContent {
-		return // no body to process
+	if rsp.StatusCode == http.StatusConflict {
+		var apiErr Error
+		if e := json.Unmarshal(body, &apiErr); e == nil {
+			err = apiErr
+			return
+		}
 	}
 
-	body, err = io.ReadAll(rsp.Body)
-	if err != nil {
+	if rsp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("unexpected status code: %d, body: %s", rsp.StatusCode, string(body))
 		return
 	}
 
@@ -177,19 +177,25 @@ func (ep Endpoint[reqT, resT]) Delete(ctx convCtx.Context, params ...any) (err e
 		return
 	}
 
-	if rsp.StatusCode < 200 || rsp.StatusCode >= 300 {
+	if rsp.StatusCode == http.StatusOK {
+		return // no body to process
+	}
 
-		var body []byte
-		body, err = io.ReadAll(rsp.Body)
-		if err != nil {
-			return
-		}
-
-		err = fmt.Errorf("unexpected status code: %d, body: %s", rsp.StatusCode, string(body))
-
+	var body []byte
+	body, err = io.ReadAll(rsp.Body)
+	if err != nil {
 		return
 	}
 
+	if rsp.StatusCode == http.StatusConflict {
+		var apiErr Error
+		if e := json.Unmarshal(body, &apiErr); e == nil {
+			err = apiErr
+			return
+		}
+	}
+
+	err = fmt.Errorf("unexpected status code: %d, body: %s", rsp.StatusCode, string(body))
 	return
 }
 
