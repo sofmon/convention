@@ -216,6 +216,7 @@ func (os ObjectSet[objT, idT, shardKeyT]) SelectByID(id idT, shardKeys ...shardK
 			return
 		}
 
+		obj = new(objT)
 		err = json.Unmarshal(bytes, obj)
 		if err != nil {
 			return
