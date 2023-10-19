@@ -122,6 +122,17 @@ func ListenAndServe(ctx convCtx.Context, eps Endpoints) (err error) {
 	)
 }
 
+func ServeJSON(w http.ResponseWriter, body any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(body)
+}
+
+func ReceiveJSON[T any](r *http.Request) (res *T, err error) {
+	err = json.NewDecoder(r.Body).Decode(res)
+	return
+}
+
 func requestMatch(r *http.Request, path string) ([]string, bool) {
 
 	urlSplit := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
