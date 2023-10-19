@@ -122,14 +122,14 @@ func ListenAndServe(ctx convCtx.Context, eps Endpoints) (err error) {
 	)
 }
 
-func ServeJSON(w http.ResponseWriter, body any) {
+func ServeJSON(w http.ResponseWriter, body any) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(body)
+	return json.NewEncoder(w).Encode(body)
 }
 
-func ReceiveJSON[T any](r *http.Request) (res *T, err error) {
-	err = json.NewDecoder(r.Body).Decode(res)
+func ReceiveJSON[T any](r *http.Request) (res T, err error) {
+	err = json.NewDecoder(r.Body).Decode(&res)
 	return
 }
 
