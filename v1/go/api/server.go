@@ -7,12 +7,36 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
+	"sort"
 	"strings"
 	"time"
 
 	convCfg "github.com/sofmon/convention/v1/go/cfg"
 	convCtx "github.com/sofmon/convention/v1/go/ctx"
+	convDB "github.com/sofmon/convention/v1/go/db"
 )
+
+type UserID string
+
+type User struct {
+	UserID    UserID
+	Name      string
+	CreatedAt time.Time
+	CreatedBy string
+	UpdatedAt time.Time
+	UpdatedBy string
+}
+
+func (u User) Trail() convDB.Trail[UserID, UserID] {
+	return convDB.Trail[UserID, UserID]{
+		ID:        u.UserID,
+		ShardKey:  u.UserID,
+		CreatedAt: u.CreatedAt,
+		CreatedBy: u.CreatedBy,
+		UpdatedAt: u.UpdatedAt,
+		UpdatedBy: u.UpdatedBy,
+	}
+}
 
 const (
 	httpHeaderAuthorization = "Authorization"
@@ -20,17 +44,116 @@ const (
 
 type Endpoints map[string]func(ctx convCtx.Context, w http.ResponseWriter, r *http.Request, params ...string)
 
+func computeHandles(eps Endpoints) (hls []handle) {
+
+	hls = make([]handle, 0, len(eps))
+
+	for pattern, handleFunc := range eps {
+
+		hdl := handle{
+			pattern:    pattern,
+			handleFunc: handleFunc,
+		}
+
+		var segmentsSplit []string
+
+		methodSplit := strings.Split(pattern, " ")
+
+		hasMethodSpecific := len(methodSplit) > 1 && strings.HasPrefix(methodSplit[1], "/")
+
+		if hasMethodSpecific {
+			hdl.methods = append(hdl.methods, strings.Split(methodSplit[0], "|")...)
+			segmentsSplit = strings.Split(strings.Trim(methodSplit[1], "/"), "/")
+		} else {
+			segmentsSplit = strings.Split(strings.Trim(pattern, "/"), "/")
+		}
+
+		weight := 0
+		for _, s := range segmentsSplit {
+			isParam := strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}")
+			if isParam {
+				s = strings.TrimLeft(s, "{")
+				s = strings.TrimRight(s, "}")
+				hdl.segments = append(hdl.segments, segment{s, true})
+			} else {
+				hdl.segments = append(hdl.segments, segment{s, false})
+				weight++
+			}
+		}
+
+		hls = append(hls, hdl)
+	}
+
+	sort.Slice(
+		hls,
+		func(i, j int) bool {
+			return hls[i].weight > hls[j].weight
+		},
+	)
+
+	return
+}
+
+type segment struct {
+	value string
+	param bool
+}
+
+type handle struct {
+	pattern    string
+	handleFunc func(ctx convCtx.Context, w http.ResponseWriter, r *http.Request, params ...string)
+
+	methods  []string
+	segments []segment
+	weight   int
+}
+
+func (e handle) Match(r *http.Request) (params []string, match bool) {
+
+	if len(e.methods) > 0 {
+		for _, method := range e.methods {
+			if r.Method == method {
+				match = true
+			}
+		}
+		if !match {
+			return
+		}
+	}
+
+	urlSplit := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+
+	match = len(urlSplit) == len(e.segments)
+	if !match {
+		return
+	}
+
+	for i, segment := range e.segments {
+		if segment.param {
+			params = append(params, urlSplit[i])
+			continue
+		}
+
+		if segment.value != urlSplit[i] {
+			match = false
+			return
+		}
+	}
+
+	return
+}
+
 type httpHandler struct {
 	ctx convCtx.Context
-	eps Endpoints
+	hls []handle
 }
 
 func (h httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := h.ctx.WithScope("convention.api.httpHandler.ServeHTTP")
 	defer ctx.Exit(nil)
 
-	for path, handler := range h.eps {
-		if params, ok := requestMatch(r, path); ok {
+	for _, handler := range h.hls {
+		if params, ok := handler.Match(r); ok {
 
 			ctx := ctx.WithRequest(r)
 
@@ -57,7 +180,7 @@ func (h httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				r.Header.Set("Authorization", authHeader)
 			}
 
-			handler(ctx, rec, r, params...)
+			handler.handleFunc(ctx, rec, r, params...)
 
 			res := rec.Result()
 
@@ -118,7 +241,7 @@ func ListenAndServe(ctx convCtx.Context, eps Endpoints) (err error) {
 	return http.ListenAndServeTLS(":443",
 		convCfg.FilePath("communication_certificate"),
 		convCfg.FilePath("communication_key"),
-		httpHandler{ctx, eps},
+		httpHandler{ctx, computeHandles(eps)},
 	)
 }
 
@@ -131,33 +254,6 @@ func ServeJSON(w http.ResponseWriter, body any) error {
 func ReceiveJSON[T any](r *http.Request) (res T, err error) {
 	err = json.NewDecoder(r.Body).Decode(&res)
 	return
-}
-
-func requestMatch(r *http.Request, path string) ([]string, bool) {
-
-	urlSplit := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	matchSplit := strings.Split(strings.Trim(path, "/"), "/")
-
-	if len(urlSplit) != len(matchSplit) {
-		return nil, false
-	}
-
-	var params []string
-
-	pCnt := 0
-	for i := 0; i < len(urlSplit); i++ {
-		if matchSplit[i] == "%s" {
-			params = append(params, urlSplit[i])
-			pCnt++
-			continue
-		}
-
-		if matchSplit[i] != urlSplit[i] {
-			return nil, false
-		}
-	}
-
-	return params, true
 }
 
 type traceEntry struct {
