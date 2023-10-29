@@ -8,7 +8,9 @@ import (
 type ErrorCode string
 
 const (
-	ErrorCodeNotFound ErrorCode = "not_found"
+	ErrorCodeInternalError ErrorCode = "internal_error"
+	ErrorCodeNotFound      ErrorCode = "not_found"
+	ErrorCodeBadRequest    ErrorCode = "bad_request"
 )
 
 func NewError(code ErrorCode, message string) (err error) {
@@ -29,12 +31,11 @@ func (e Error) Error() string {
 }
 
 func ServeError(w http.ResponseWriter, code ErrorCode, message string) {
+	serveError(w, Error{code, message})
+}
+
+func serveError(w http.ResponseWriter, err Error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusConflict)
-	json.NewEncoder(w).Encode(
-		Error{
-			Code:    code,
-			Message: message,
-		},
-	)
+	json.NewEncoder(w).Encode(err)
 }

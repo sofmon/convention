@@ -1,0 +1,84 @@
+package api
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+
+	convCtx "github.com/sofmon/convention/v1/go/ctx"
+)
+
+func NewTrigger(fn func(ctx convCtx.Context, values Values) error) Trigger {
+	return Trigger{
+		fn: fn,
+	}
+}
+
+type Trigger struct {
+	descriptor descriptor
+	fn         func(ctx convCtx.Context, values Values) error
+}
+
+func (x *Trigger) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *http.Request) bool {
+
+	values, match := x.descriptor.match(r)
+	if !match {
+		return false
+	}
+
+	err := x.fn(ctx.WithRequest(r), values)
+	if err != nil {
+		if e, ok := err.(Error); ok {
+			serveError(w, e)
+		} else {
+			ServeError(w, ErrorCodeInternalError, err.Error())
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+
+	return true
+}
+
+func (x *Trigger) setDescriptor(desc descriptor) {
+	x.descriptor = desc
+}
+
+func (x *Trigger) getDescriptor() descriptor {
+	return x.descriptor
+}
+
+func (x *Trigger) Call(ctx convCtx.Context, values Values) (err error) {
+	if !x.descriptor.isSet() {
+		err = errors.New("api not initialized as client; user convAPI.NewClient to create client form api definition")
+		return
+	}
+
+	req, err := x.descriptor.newRequest(values, nil)
+	if err != nil {
+		return
+	}
+
+	setContextHttpHeaders(ctx, req)
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+
+	if res.StatusCode == http.StatusOK {
+		return
+	}
+
+	if res.StatusCode == http.StatusConflict {
+		var eErr Error
+		err = json.NewDecoder(res.Body).Decode(&eErr)
+		if err == nil { // if we have error here, we leave it to the generic error below
+			return eErr
+		}
+	}
+
+	err = errors.New("unexpected status code: " + res.Status)
+
+	return
+}
