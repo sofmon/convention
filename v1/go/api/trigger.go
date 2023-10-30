@@ -33,9 +33,9 @@ func (x *Trigger) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 		} else {
 			ServeError(w, ErrorCodeInternalError, err.Error())
 		}
+	} else {
+		w.WriteHeader(http.StatusOK)
 	}
-
-	w.WriteHeader(http.StatusOK)
 
 	return true
 }

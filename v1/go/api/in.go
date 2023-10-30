@@ -43,9 +43,9 @@ func (x *In[inT]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 			ServeError(w, ErrorCodeInternalError, err.Error())
 			return true
 		}
+	} else {
+		w.WriteHeader(http.StatusOK)
 	}
-
-	w.WriteHeader(http.StatusOK)
 
 	return true
 }

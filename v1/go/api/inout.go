@@ -41,9 +41,9 @@ func (x InOut[inT, outT]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter
 		} else {
 			ServeError(w, ErrorCodeInternalError, err.Error())
 		}
+	} else {
+		ServeJSON(w, out)
 	}
-
-	ServeJSON(w, out)
 
 	return true
 }
