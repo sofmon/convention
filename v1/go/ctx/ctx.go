@@ -19,7 +19,7 @@ const (
 	contextKeyRequestID
 	contextKeyRequestClaims
 	contextKeyScope
-	contextKeySystemAccount
+	contextKeySystemUser
 )
 
 type App string

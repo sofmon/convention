@@ -2,18 +2,18 @@ package ctx
 
 import "context"
 
-func (ctx Context) WithSystemAccount() Context {
+func (ctx Context) WithSystemUser() Context {
 	return Context{
 		context.WithValue(
 			ctx.Context,
-			contextKeySystemAccount,
+			contextKeySystemUser,
 			true,
 		),
 	}
 }
 
-func (ctx Context) MustUseSystemAccount() bool {
-	obj := ctx.Value(contextKeySystemAccount)
+func (ctx Context) MustUseSystemUser() bool {
+	obj := ctx.Value(contextKeySystemUser)
 	if obj == nil {
 		return false
 	}

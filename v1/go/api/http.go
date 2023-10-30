@@ -27,15 +27,14 @@ func ReceiveJSON[T any](r *http.Request) (res T, err error) {
 
 func setContextHttpHeaders(ctx convCtx.Context, r *http.Request) {
 
-	inReq := ctx.Request()
-
 	r.Header.Add(httpHeaderRequestID, string(ctx.RequestID()))
 	r.Header.Add(httpHeaderApp, string(ctx.App()))
 
-	if inReq == nil {
+	inReq := ctx.Request()
+
+	if inReq == nil || ctx.MustUseSystemUser() {
 		systemClaim := convAuth.NewClaims(string(ctx.App()), false, true)
 		convAuth.EncodeHTTPRequestClaims(r, systemClaim)
-		return
 	} else {
 		authHeader := inReq.Header.Get(httpHeaderAuthorization)
 		if authHeader != "" {
