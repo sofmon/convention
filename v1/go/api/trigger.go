@@ -59,7 +59,10 @@ func (x *Trigger) Call(ctx convCtx.Context, values Values) (err error) {
 		return
 	}
 
-	setContextHttpHeaders(ctx, req)
+	err = setContextHttpHeaders(ctx, req)
+	if err != nil {
+		return
+	}
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {

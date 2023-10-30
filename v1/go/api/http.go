@@ -25,7 +25,7 @@ func ReceiveJSON[T any](r *http.Request) (res T, err error) {
 	return
 }
 
-func setContextHttpHeaders(ctx convCtx.Context, r *http.Request) {
+func setContextHttpHeaders(ctx convCtx.Context, r *http.Request) (err error) {
 
 	r.Header.Add(httpHeaderRequestID, string(ctx.RequestID()))
 	r.Header.Add(httpHeaderApp, string(ctx.App()))
@@ -34,7 +34,10 @@ func setContextHttpHeaders(ctx convCtx.Context, r *http.Request) {
 
 	if inReq == nil || ctx.MustUseSystemUser() {
 		systemClaim := convAuth.NewClaims(string(ctx.App()), false, true)
-		convAuth.EncodeHTTPRequestClaims(r, systemClaim)
+		err = convAuth.EncodeHTTPRequestClaims(r, systemClaim)
+		if err != nil {
+			return
+		}
 	} else {
 		authHeader := inReq.Header.Get(httpHeaderAuthorization)
 		if authHeader != "" {
@@ -42,4 +45,5 @@ func setContextHttpHeaders(ctx convCtx.Context, r *http.Request) {
 		}
 	}
 
+	return
 }

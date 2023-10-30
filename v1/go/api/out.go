@@ -62,7 +62,11 @@ func (x *Out[outT]) Call(ctx convCtx.Context, values Values) (out outT, err erro
 		return
 	}
 
-	setContextHttpHeaders(ctx, req)
+	err = setContextHttpHeaders(ctx, req)
+	if err != nil {
+		return
+	}
+
 	req.Header.Add("Accept", "application/json")
 
 	res, err := http.DefaultClient.Do(req)

@@ -74,7 +74,11 @@ func (x *In[inT]) Call(ctx convCtx.Context, values Values, in inT) (err error) {
 		return
 	}
 
-	setContextHttpHeaders(ctx, req)
+	err = setContextHttpHeaders(ctx, req)
+	if err != nil {
+		return
+	}
+
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "application/json")
 
