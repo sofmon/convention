@@ -27,8 +27,12 @@ func ListenAndServe(ctx convCtx.Context, host string, port int, svc any) (err er
 		fmt.Sprintf("%s:%d", host, port),              // following convention/v1
 		convCfg.FilePath("communication_certificate"), // following convention/v1
 		convCfg.FilePath("communication_key"),         // following convention/v1
-		httpHandler{ctx, computeEndpoints(host, port, svc)},
+		NewHandler(ctx, host, port, svc),
 	)
+}
+
+func NewHandler(ctx convCtx.Context, host string, port int, svc any) http.Handler {
+	return httpHandler{ctx, computeEndpoints(host, port, svc)}
 }
 
 func computeEndpoints(host string, port int, svc any) (eps endpoints) {
