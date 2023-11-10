@@ -9,20 +9,20 @@ import (
 	convCtx "github.com/sofmon/convention/v1/go/ctx"
 )
 
-func NewInOut[inT, outT any](fn func(ctx convCtx.Context, in inT) (outT, error)) InOut[inT, outT] {
-	return InOut[inT, outT]{
+func NewInOutP4[inT, outT any, p1T, p2T, p3T, p4T ~string](fn func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, p4 p4T, in inT) (outT, error)) InOutP4[inT, outT, p1T, p2T, p3T, p4T] {
+	return InOutP4[inT, outT, p1T, p2T, p3T, p4T]{
 		fn: fn,
 	}
 }
 
-type InOut[inT, outT any] struct {
+type InOutP4[inT, outT any, p1T, p2T, p3T, p4T ~string] struct {
 	descriptor descriptor
-	fn         func(ctx convCtx.Context, in inT) (outT, error)
+	fn         func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, p4 p4T, in inT) (outT, error)
 }
 
-func (x *InOut[inT, outT]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *http.Request) bool {
+func (x *InOutP4[inT, outT, p1T, p2T, p3T, p4T]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *http.Request) bool {
 
-	_, match := x.descriptor.match(r)
+	values, match := x.descriptor.match(r)
 	if !match {
 		return false
 	}
@@ -34,7 +34,14 @@ func (x *InOut[inT, outT]) execIfMatch(ctx convCtx.Context, w http.ResponseWrite
 		return true
 	}
 
-	out, err := x.fn(ctx.WithRequest(r), in)
+	out, err := x.fn(
+		ctx.WithRequest(r),
+		p1T(values.GetByIndex(0)),
+		p2T(values.GetByIndex(1)),
+		p3T(values.GetByIndex(2)),
+		p4T(values.GetByIndex(3)),
+		in,
+	)
 	if err != nil {
 		if e, ok := err.(Error); ok {
 			serveError(w, e)
@@ -48,15 +55,15 @@ func (x *InOut[inT, outT]) execIfMatch(ctx convCtx.Context, w http.ResponseWrite
 	return true
 }
 
-func (x *InOut[inT, outT]) setDescriptor(desc descriptor) {
+func (x *InOutP4[inT, outT, p1T, p2T, p3T, p4T]) setDescriptor(desc descriptor) {
 	x.descriptor = desc
 }
 
-func (x *InOut[inT, outT]) getDescriptor() descriptor {
+func (x *InOutP4[inT, outT, p1T, p2T, p3T, p4T]) getDescriptor() descriptor {
 	return x.descriptor
 }
 
-func (x *InOut[inT, outT]) Call(ctx convCtx.Context, in inT) (out outT, err error) {
+func (x *InOutP4[inT, outT, p1T, p2T, p3T, p4T]) Call(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, p4 p4T, in inT) (out outT, err error) {
 
 	if !x.descriptor.isSet() {
 		err = errors.New("api not initialized as client; user convAPI.NewClient to create client form api definition")
@@ -68,7 +75,14 @@ func (x *InOut[inT, outT]) Call(ctx convCtx.Context, in inT) (out outT, err erro
 		return
 	}
 
-	req, err := x.descriptor.newRequest(nil, bytes.NewReader(body))
+	values := values{
+		{Name: "", Value: string(p1)},
+		{Name: "", Value: string(p2)},
+		{Name: "", Value: string(p3)},
+		{Name: "", Value: string(p4)},
+	}
+
+	req, err := x.descriptor.newRequest(values, bytes.NewReader(body))
 	if err != nil {
 		return
 	}

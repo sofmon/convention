@@ -9,7 +9,7 @@ import (
 	convCtx "github.com/sofmon/convention/v1/go/ctx"
 )
 
-func NewIn[inT any](fn func(ctx convCtx.Context, in inT, values Values) error) In[inT] {
+func NewIn[inT any](fn func(ctx convCtx.Context, in inT) error) In[inT] {
 	return In[inT]{
 		fn: fn,
 	}
@@ -17,12 +17,12 @@ func NewIn[inT any](fn func(ctx convCtx.Context, in inT, values Values) error) I
 
 type In[inT any] struct {
 	descriptor descriptor
-	fn         func(ctx convCtx.Context, in inT, values Values) error
+	fn         func(ctx convCtx.Context, in inT) error
 }
 
 func (x *In[inT]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *http.Request) bool {
 
-	values, match := x.descriptor.match(r)
+	_, match := x.descriptor.match(r)
 	if !match {
 		return false
 	}
@@ -34,7 +34,7 @@ func (x *In[inT]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 		return true
 	}
 
-	err = x.fn(ctx.WithRequest(r), in, values)
+	err = x.fn(ctx.WithRequest(r), in)
 	if err != nil {
 		if e, ok := err.(Error); ok {
 			serveError(w, e)
@@ -58,7 +58,8 @@ func (x *In[inT]) getDescriptor() descriptor {
 	return x.descriptor
 }
 
-func (x *In[inT]) Call(ctx convCtx.Context, values Values, in inT) (err error) {
+func (x *In[inT]) Call(ctx convCtx.Context, in inT) (err error) {
+
 	if !x.descriptor.isSet() {
 		err = errors.New("api not initialized as client; user convAPI.NewClient to create client form api definition")
 		return
@@ -69,7 +70,7 @@ func (x *In[inT]) Call(ctx convCtx.Context, values Values, in inT) (err error) {
 		return
 	}
 
-	req, err := x.descriptor.newRequest(values, bytes.NewReader(body))
+	req, err := x.descriptor.newRequest(nil, bytes.NewReader(body))
 	if err != nil {
 		return
 	}

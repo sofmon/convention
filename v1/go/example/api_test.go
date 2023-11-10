@@ -20,10 +20,10 @@ type User struct {
 type API struct {
 	GetHealth convAPI.Out[string] `api:"GET /health"`
 
-	PutUser convAPI.In[User]  `api:"PUT /users/{user_id}" description:"Create new user"`
-	GetUser convAPI.Out[User] `api:"GET /users/{user_id}" description:"Get user"`
+	PutUser convAPI.InP1[User, UserID]  `api:"PUT /users/{user_id}" description:"Create new user"`
+	GetUser convAPI.OutP1[User, UserID] `api:"GET /users/{user_id}" description:"Get user"`
 
-	PostUserDisable convAPI.InOut[User, User] `api:"POST /users/{user_id}/@block" description:"block user"`
+	PostUserDisable convAPI.InOutP1[User, User, UserID] `api:"POST /users/{user_id}/@block" description:"block user"`
 }
 
 func Test_server_and_client(t *testing.T) {
@@ -37,22 +37,21 @@ func Test_server_and_client(t *testing.T) {
 	// Create a service based on the API specification
 	service := &API{
 		GetHealth: convAPI.NewOut(
-			func(ctx convCtx.Context, values convAPI.Values) (string, error) {
+			func(ctx convCtx.Context) (string, error) {
 				return "OK", nil
 			},
 		),
-		PutUser: convAPI.NewIn(
-			func(ctx convCtx.Context, user User, values convAPI.Values) error {
-				if user.UserID != UserID(values["user_id"]) {
+		PutUser: convAPI.NewInP1(
+			func(ctx convCtx.Context, uid UserID, user User) error {
+				if user.UserID != uid {
 					return convAPI.NewError("bad_request", "mismatch between user_id in path and body")
 				}
 				userDB[user.UserID] = user
 				return nil
 			},
 		),
-		GetUser: convAPI.NewOut(
-			func(ctx convCtx.Context, values convAPI.Values) (User, error) {
-				uid := UserID(values["user_id"])
+		GetUser: convAPI.NewOutP1(
+			func(ctx convCtx.Context, uid UserID) (User, error) {
 				user, ok := userDB[uid]
 				if !ok {
 					return User{}, convAPI.NewError("not_found", "user not found")
@@ -74,7 +73,7 @@ func Test_server_and_client(t *testing.T) {
 	// Create new client based on the same API specification
 	client := convAPI.NewClient[API]("localhost", 12345)
 
-	res, err := client.GetHealth.Call(ctx, nil)
+	res, err := client.GetHealth.Call(ctx)
 	if err != nil {
 		t.Errorf("GetHealth.Call() = %v; want nil", err)
 	}
@@ -84,9 +83,7 @@ func Test_server_and_client(t *testing.T) {
 
 	err = client.PutUser.Call(
 		ctx,
-		convAPI.Values{
-			"user_id": "123",
-		},
+		"123",
 		User{
 			UserID: "123",
 			Name:   "John Doe",
@@ -96,12 +93,7 @@ func Test_server_and_client(t *testing.T) {
 		t.Errorf("PutUser.Call() = %v; want nil", err)
 	}
 
-	u, err := client.GetUser.Call(
-		ctx,
-		convAPI.Values{
-			"user_id": "123",
-		},
-	)
+	u, err := client.GetUser.Call(ctx, "123")
 	if err != nil {
 		t.Errorf("GetUser.Call() = %v; want nil", err)
 	}

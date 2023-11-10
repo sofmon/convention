@@ -9,20 +9,20 @@ import (
 	convCtx "github.com/sofmon/convention/v1/go/ctx"
 )
 
-func NewInOut[inT, outT any](fn func(ctx convCtx.Context, in inT) (outT, error)) InOut[inT, outT] {
-	return InOut[inT, outT]{
+func NewInP2[inT any, p1T, p2T ~string](fn func(ctx convCtx.Context, p1 p1T, p2 p2T, in inT) error) InP2[inT, p1T, p2T] {
+	return InP2[inT, p1T, p2T]{
 		fn: fn,
 	}
 }
 
-type InOut[inT, outT any] struct {
+type InP2[inT any, p1T, p2T ~string] struct {
 	descriptor descriptor
-	fn         func(ctx convCtx.Context, in inT) (outT, error)
+	fn         func(ctx convCtx.Context, p1 p1T, p2 p2T, in inT) error
 }
 
-func (x *InOut[inT, outT]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *http.Request) bool {
+func (x *InP2[inT, p1T, p2T]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *http.Request) bool {
 
-	_, match := x.descriptor.match(r)
+	values, match := x.descriptor.match(r)
 	if !match {
 		return false
 	}
@@ -34,29 +34,36 @@ func (x *InOut[inT, outT]) execIfMatch(ctx convCtx.Context, w http.ResponseWrite
 		return true
 	}
 
-	out, err := x.fn(ctx.WithRequest(r), in)
+	err = x.fn(
+		ctx.WithRequest(r),
+		p1T(values.GetByIndex(0)),
+		p2T(values.GetByIndex(1)),
+		in,
+	)
 	if err != nil {
 		if e, ok := err.(Error); ok {
 			serveError(w, e)
+			return true
 		} else {
 			ServeError(w, ErrorCodeInternalError, err.Error())
+			return true
 		}
 	} else {
-		ServeJSON(w, out)
+		w.WriteHeader(http.StatusOK)
 	}
 
 	return true
 }
 
-func (x *InOut[inT, outT]) setDescriptor(desc descriptor) {
+func (x *InP2[inT, p1T, p2T]) setDescriptor(desc descriptor) {
 	x.descriptor = desc
 }
 
-func (x *InOut[inT, outT]) getDescriptor() descriptor {
+func (x *InP2[inT, p1T, p2T]) getDescriptor() descriptor {
 	return x.descriptor
 }
 
-func (x *InOut[inT, outT]) Call(ctx convCtx.Context, in inT) (out outT, err error) {
+func (x *InP2[inT, p1T, p2T]) Call(ctx convCtx.Context, p1 p1T, p2 p2T, in inT) (err error) {
 
 	if !x.descriptor.isSet() {
 		err = errors.New("api not initialized as client; user convAPI.NewClient to create client form api definition")
@@ -68,7 +75,12 @@ func (x *InOut[inT, outT]) Call(ctx convCtx.Context, in inT) (out outT, err erro
 		return
 	}
 
-	req, err := x.descriptor.newRequest(nil, bytes.NewReader(body))
+	values := values{
+		{Name: "", Value: string(p1)},
+		{Name: "", Value: string(p2)},
+	}
+
+	req, err := x.descriptor.newRequest(values, bytes.NewReader(body))
 	if err != nil {
 		return
 	}
@@ -87,7 +99,6 @@ func (x *InOut[inT, outT]) Call(ctx convCtx.Context, in inT) (out outT, err erro
 	}
 
 	if res.StatusCode == http.StatusOK {
-		err = json.NewDecoder(res.Body).Decode(&out)
 		return
 	}
 

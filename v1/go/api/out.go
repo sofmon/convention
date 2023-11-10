@@ -8,7 +8,7 @@ import (
 	convCtx "github.com/sofmon/convention/v1/go/ctx"
 )
 
-func NewOut[outT any](fn func(ctx convCtx.Context, values Values) (outT, error)) Out[outT] {
+func NewOut[outT any](fn func(ctx convCtx.Context) (outT, error)) Out[outT] {
 	return Out[outT]{
 		fn: fn,
 	}
@@ -16,17 +16,17 @@ func NewOut[outT any](fn func(ctx convCtx.Context, values Values) (outT, error))
 
 type Out[outT any] struct {
 	descriptor descriptor
-	fn         func(ctx convCtx.Context, values Values) (outT, error)
+	fn         func(ctx convCtx.Context) (outT, error)
 }
 
 func (x *Out[outT]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *http.Request) bool {
 
-	values, match := x.descriptor.match(r)
+	_, match := x.descriptor.match(r)
 	if !match {
 		return false
 	}
 
-	out, err := x.fn(ctx.WithRequest(r), values)
+	out, err := x.fn(ctx.WithRequest(r))
 	if err != nil {
 		if e, ok := err.(Error); ok {
 			serveError(w, e)
@@ -48,16 +48,14 @@ func (x *Out[outT]) getDescriptor() descriptor {
 	return x.descriptor
 }
 
-func (x *Out[outT]) Call(ctx convCtx.Context, values Values) (out outT, err error) {
-	ctx = ctx.WithScope("convention.api.Call")
-	defer ctx.Exit(&err)
+func (x *Out[outT]) Call(ctx convCtx.Context) (out outT, err error) {
 
 	if !x.descriptor.isSet() {
 		err = errors.New("api not initialized as client; user convAPI.NewClient to create client form api definition")
 		return
 	}
 
-	req, err := x.descriptor.newRequest(values, nil)
+	req, err := x.descriptor.newRequest(nil, nil)
 	if err != nil {
 		return
 	}

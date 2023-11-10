@@ -54,14 +54,12 @@ func (desc *descriptor) isSet() bool {
 	return desc != nil && desc.host != ""
 }
 
-func (desc *descriptor) match(r *http.Request) (values Values, match bool) {
+func (desc *descriptor) match(r *http.Request) (values values, match bool) {
 
 	// if desc.host != "" && desc.host != r.Host {
 	// 	match = false
 	// 	return
 	// }
-
-	values = Values{}
 
 	if desc.method != r.Method {
 		match = false
@@ -77,7 +75,7 @@ func (desc *descriptor) match(r *http.Request) (values Values, match bool) {
 
 	for i, segment := range desc.segments {
 		if segment.param {
-			values.Set(segment.value, urlSplit[i])
+			values.Add(segment.value, urlSplit[i])
 			continue
 		}
 
@@ -91,7 +89,7 @@ func (desc *descriptor) match(r *http.Request) (values Values, match bool) {
 
 }
 
-func (desc *descriptor) newRequest(values Values, body io.Reader) (*http.Request, error) {
+func (desc *descriptor) newRequest(vls values, body io.Reader) (*http.Request, error) {
 
 	sb := strings.Builder{}
 
@@ -99,14 +97,17 @@ func (desc *descriptor) newRequest(values Values, body io.Reader) (*http.Request
 	sb.WriteString(fmt.Sprintf("%s:%d", desc.host, desc.port))
 	sb.WriteRune('/')
 
+	vi := 0
+
 	for i, segment := range desc.segments {
 
 		if segment.param {
-			val := values.Get(segment.value)
+			val := vls.GetByIndex(vi)
 			if val == "" {
 				return nil, fmt.Errorf("missing value '%s'", segment.value)
 			}
-			sb.WriteString(values.Get(segment.value))
+			sb.WriteString(val)
+			vi++
 		} else {
 			sb.WriteString(segment.value)
 		}
