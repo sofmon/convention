@@ -9,26 +9,27 @@ import (
 	convCtx "github.com/sofmon/convention/v1/go/ctx"
 )
 
-func NewRaw(fn func(ctx convCtx.Context, w http.ResponseWriter, r *http.Request)) Raw {
-	return Raw{
+func NewRawP1[p1T ~string](fn func(ctx convCtx.Context, p1 p1T, w http.ResponseWriter, r *http.Request)) RawP1[p1T] {
+	return RawP1[p1T]{
 		fn: fn,
 	}
 }
 
-type Raw struct {
+type RawP1[p1T ~string] struct {
 	descriptor descriptor
-	fn         func(ctx convCtx.Context, w http.ResponseWriter, r *http.Request)
+	fn         func(ctx convCtx.Context, p1 p1T, w http.ResponseWriter, r *http.Request)
 }
 
-func (x *Raw) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *http.Request) bool {
+func (x *RawP1[p1T]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *http.Request) bool {
 
-	_, match := x.descriptor.match(r)
+	values, match := x.descriptor.match(r)
 	if !match {
 		return false
 	}
 
 	x.fn(
 		ctx.WithRequest(r),
+		p1T(values.GetByIndex(0)),
 		w,
 		r,
 	)
@@ -36,22 +37,26 @@ func (x *Raw) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *http.Re
 	return true
 }
 
-func (x *Raw) setDescriptor(desc descriptor) {
+func (x *RawP1[p1T]) setDescriptor(desc descriptor) {
 	x.descriptor = desc
 }
 
-func (x *Raw) getDescriptor() descriptor {
+func (x *RawP1[p1T]) getDescriptor() descriptor {
 	return x.descriptor
 }
 
-func (x *Raw) Call(ctx convCtx.Context, body io.Reader) (err error) {
+func (x *RawP1[p1T]) Call(ctx convCtx.Context, p1 p1T, body io.Reader) (err error) {
 
 	if !x.descriptor.isSet() {
 		err = errors.New("api not initialized as client; user convAPI.NewClient to create client form api definition")
 		return
 	}
 
-	req, err := x.descriptor.newRequest(nil, body)
+	values := values{
+		{Name: "", Value: string(p1)},
+	}
+
+	req, err := x.descriptor.newRequest(values, body)
 	if err != nil {
 		return
 	}
