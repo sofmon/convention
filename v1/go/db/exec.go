@@ -38,17 +38,19 @@ func (os ObjectSet[objT, idT, shardKeyT]) Exec(exec exec, shardKeys ...shardKeyT
 		if err != nil {
 			return
 		}
-		defer func() {
+	}
+	defer func() {
+		for _, tx := range txs {
 			if err != nil {
 				err = errors.Join(
 					err,
-					txs[i].Rollback(),
+					tx.Rollback(),
 				)
 				return
 			}
-			err = txs[i].Commit()
-		}()
-	}
+			err = tx.Commit()
+		}
+	}()
 
 	for _, tx := range txs {
 		_, err = tx.Exec(exec.statement, exec.params...)
