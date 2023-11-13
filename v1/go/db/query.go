@@ -264,7 +264,19 @@ func (os ObjectSet[objT, idT, shardKeyT]) Delete(id idT, shardKeys ...shardKeyT)
 	return
 }
 
-func (os ObjectSet[objT, idT, shardKeyT]) Select(where string, params ...any) (obs []objT, err error) {
+type where struct {
+	statement string
+	params    []any
+}
+
+func Where(statement string, params ...any) where {
+	return where{
+		statement: statement,
+		params:    params,
+	}
+}
+
+func (os ObjectSet[objT, idT, shardKeyT]) Select(where where, shardKeys ...shardKeyT) (obs []objT, err error) {
 
 	table, ok := typeToTable[os.objType]
 	if !ok {
@@ -274,7 +286,7 @@ func (os ObjectSet[objT, idT, shardKeyT]) Select(where string, params ...any) (o
 
 	var dbs []*sql.DB
 	if table.Sharding {
-		dbs = Shards()
+		dbs = dbsForShardKeys(shardKeys...)
 	} else {
 		dbs = []*sql.DB{Default()}
 	}
@@ -282,7 +294,7 @@ func (os ObjectSet[objT, idT, shardKeyT]) Select(where string, params ...any) (o
 	for _, db := range dbs {
 
 		var rows *sql.Rows
-		rows, err = db.Query(`SELECT "object" FROM "`+table.RuntimeTableName+`" WHERE `+where, params...)
+		rows, err = db.Query(`SELECT "object" FROM "`+table.RuntimeTableName+`" WHERE `+where.statement, where.params...)
 		if err == sql.ErrNoRows {
 			err = nil
 			continue
