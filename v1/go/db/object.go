@@ -27,11 +27,13 @@ type dbTable struct {
 	ObjectTypeName   string
 	RuntimeTableName string
 	HistoryTableName string
+	LockTableName    string
 	Sharding         bool
 }
 
 const (
 	historySuffix = "_history"
+	lockSuffix    = "_lock"
 )
 
 var (
@@ -79,6 +81,7 @@ func RegisterObject[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string]
 
 	runtimeTableName := toSnakeCase(objType.Name())
 	historyTableName := runtimeTableName + historySuffix
+	lockTableName := runtimeTableName + lockSuffix
 
 	createScript := `CREATE TABLE IF NOT EXISTS "` + runtimeTableName + `" (
 "id" text PRIMARY KEY,
@@ -95,7 +98,14 @@ CREATE TABLE IF NOT EXISTS "` + historyTableName + `" (
 "updated_at" timestamp DEFAULT now(),
 "updated_by" text NOT NULL,
 "object" JSONB NULL
-);`
+);
+CREATE TABLE IF NOT EXISTS "` + lockTableName + `" (
+"id" text PRIMARY KEY,
+"created_at" timestamp DEFAULT now(),
+"created_by" text NOT NULL,
+"description" text NOT NULL
+);
+`
 
 	if sharding {
 		for _, shard := range Shards() {
@@ -116,6 +126,7 @@ CREATE TABLE IF NOT EXISTS "` + historyTableName + `" (
 		ObjectTypeName:   objTypeName,
 		RuntimeTableName: runtimeTableName,
 		HistoryTableName: historyTableName,
+		LockTableName:    lockTableName,
 		Sharding:         sharding,
 	}
 
