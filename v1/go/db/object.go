@@ -73,7 +73,7 @@ func dbsForShardKeys[shardKeyT ~string](sks ...shardKeyT) []*sql.DB {
 
 }
 
-func RegisterObject[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](sharding bool) (err error) {
+func RegisterObject[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](sharding bool, indexes ...string) (err error) {
 
 	obj := new(objT)
 	objType := reflect.TypeOf(*obj)
@@ -106,6 +106,12 @@ CREATE TABLE IF NOT EXISTS "` + lockTableName + `" (
 "description" text NOT NULL
 );
 `
+
+	for _, index := range indexes {
+		createScript += `CREATE INDEX IF NOT EXISTS "` + runtimeTableName + `_` + index + `"
+ON "` + runtimeTableName + `" USING gin (("object"->'` + index + `'));
+`
+	}
 
 	if sharding {
 		for _, shard := range Shards() {
