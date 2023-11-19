@@ -102,7 +102,6 @@ CREATE TABLE IF NOT EXISTS "` + historyTableName + `" (
 CREATE TABLE IF NOT EXISTS "` + lockTableName + `" (
 "id" text PRIMARY KEY,
 "created_at" timestamp DEFAULT now(),
-"created_by" text NOT NULL,
 "description" text NOT NULL
 );
 `
