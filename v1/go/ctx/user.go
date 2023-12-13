@@ -8,7 +8,7 @@ func (ctx Context) User() string {
 	return claims.User()
 }
 
-func (ctx Context) IsAdmin() bool {
+func (ctx Context) UserIsAdmin() bool {
 	claims := ctx.RequestClaims()
 	if claims == nil {
 		return false
@@ -16,7 +16,7 @@ func (ctx Context) IsAdmin() bool {
 	return claims.IsAdmin()
 }
 
-func (ctx Context) IsSystem() bool {
+func (ctx Context) UserIsSystem() bool {
 	claims := ctx.RequestClaims()
 	if claims == nil {
 		return false
@@ -24,6 +24,6 @@ func (ctx Context) IsSystem() bool {
 	return claims.IsSystem()
 }
 
-func (ctx Context) IsAdminOrSystem() bool {
-	return ctx.IsAdmin() || ctx.IsSystem()
+func (ctx Context) UserIsAdminOrSystem() bool {
+	return ctx.UserIsAdmin() || ctx.UserIsSystem()
 }
