@@ -292,11 +292,26 @@ func (os ObjectSet[objT, idT, shardKeyT]) SafeUpdate(from, to objT) (err error) 
 		db = Default()
 	}
 
+	tx, err := db.Begin()
+	if err != nil {
+		return
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(
+				err,
+				tx.Rollback(),
+			)
+			return
+		}
+		err = tx.Commit()
+	}()
+
 	var (
 		cmp     objT
 		cmpHash string
 	)
-	row := db.QueryRow(`SELECT "object", md5("object") FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`, fromTrail.ID)
+	row := tx.QueryRow(`SELECT "object", md5("object") FROM "`+table.RuntimeTableName+`" WHERE "id"=$1 FOR UPDATE NOWAIT`, fromTrail.ID)
 	err = row.Scan(&cmp, &cmpHash)
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("object with ID '%s' does not exist", fromTrail.ID)
@@ -318,21 +333,6 @@ func (os ObjectSet[objT, idT, shardKeyT]) SafeUpdate(from, to objT) (err error) 
 	if string(cmpBytes) != string(fromBytes) {
 		return fmt.Errorf("object with ID '%s' has been modified since it was retrieved", fromTrail.ID)
 	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		return
-	}
-	defer func() {
-		if err != nil {
-			err = errors.Join(
-				err,
-				tx.Rollback(),
-			)
-			return
-		}
-		err = tx.Commit()
-	}()
 
 	toBytes, err := json.Marshal(to)
 	if err != nil {
