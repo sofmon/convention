@@ -137,3 +137,15 @@ ON "` + runtimeTableName + `" USING gin (("object"->'` + index + `'));
 
 	return
 }
+
+func NewObjectSet[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string]() ObjectSet[objT, idT, shardKeyT] {
+	obj := new(objT)
+	objType := reflect.TypeOf(*obj)
+	return ObjectSet[objT, idT, shardKeyT]{
+		objType: objType,
+	}
+}
+
+type ObjectSet[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
+	objType reflect.Type
+}

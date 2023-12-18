@@ -6,6 +6,103 @@ import (
 	"fmt"
 )
 
+func (os ObjectSet[objT, idT, shardKeyT]) SelectAll() (obs []objT, err error) {
+
+	table, ok := typeToTable[os.objType]
+	if !ok {
+		err = ErrObjectTypeNotRegistered
+		return
+	}
+
+	var dbs []*sql.DB
+	if table.Sharding {
+		dbs = Shards()
+	} else {
+		dbs = []*sql.DB{Default()}
+	}
+
+	for _, db := range dbs {
+
+		var rows *sql.Rows
+		rows, err = db.Query(`SELECT "object" FROM "` + table.RuntimeTableName + `"`)
+		if err == sql.ErrNoRows {
+			err = nil
+			continue
+		}
+		if err != nil {
+			return
+		}
+
+		for rows.Next() {
+
+			var (
+				bytes []byte
+				obj   objT
+			)
+
+			err = rows.Scan(&bytes)
+			if err != nil {
+				return
+			}
+
+			err = json.Unmarshal(bytes, &obj)
+			if err != nil {
+				return
+			}
+
+			obs = append(obs, obj)
+		}
+
+	}
+
+	return
+}
+
+func (os ObjectSet[objT, idT, shardKeyT]) SelectByID(id idT, shardKeys ...shardKeyT) (obj *objT, err error) {
+
+	table, ok := typeToTable[os.objType]
+	if !ok {
+		err = ErrObjectTypeNotRegistered
+		return
+	}
+
+	if !table.Sharding && len(shardKeys) > 0 {
+		err = ErrObjectNotUsingShards
+		return
+	}
+
+	var dbs []*sql.DB
+	if table.Sharding {
+		dbs = dbsForShardKeys(shardKeys...)
+	} else {
+		dbs = []*sql.DB{Default()}
+	}
+
+	for _, db := range dbs {
+
+		var bytes []byte
+
+		err = db.
+			QueryRow(`SELECT "object" FROM "`+table.RuntimeTableName+`" WHERE id=$1`, id).
+			Scan(&bytes)
+		if err == sql.ErrNoRows {
+			err = nil
+			continue
+		}
+		if err != nil {
+			return
+		}
+
+		obj = new(objT)
+		err = json.Unmarshal(bytes, obj)
+		if err != nil {
+			return
+		}
+
+	}
+	return
+}
+
 type where struct {
 	statement string
 	params    []any
