@@ -42,8 +42,9 @@ func (x *InOutP3[inT, outT, p1T, p2T, p3T]) execIfMatch(ctx convCtx.Context, w h
 		in,
 	)
 	if err != nil {
-		if e, ok := err.(Error); ok {
-			serveError(w, e)
+		var apiErr Error
+		if errors.As(err, &apiErr) {
+			serveError(w, apiErr)
 		} else {
 			ServeError(w, ErrorCodeInternalError, err.Error())
 		}

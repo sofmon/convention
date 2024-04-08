@@ -28,8 +28,9 @@ func (x *Out[outT]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *h
 
 	out, err := x.fn(ctx.WithRequest(r))
 	if err != nil {
-		if e, ok := err.(Error); ok {
-			serveError(w, e)
+		var apiErr Error
+		if errors.As(err, &apiErr) {
+			serveError(w, apiErr)
 		} else {
 			ServeError(w, ErrorCodeInternalError, err.Error())
 		}

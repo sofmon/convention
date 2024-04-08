@@ -42,12 +42,11 @@ func (x *InP3[inT, p1T, p2T, p3T]) execIfMatch(ctx convCtx.Context, w http.Respo
 		in,
 	)
 	if err != nil {
-		if e, ok := err.(Error); ok {
-			serveError(w, e)
-			return true
+		var apiErr Error
+		if errors.As(err, &apiErr) {
+			serveError(w, apiErr)
 		} else {
 			ServeError(w, ErrorCodeInternalError, err.Error())
-			return true
 		}
 	} else {
 		w.WriteHeader(http.StatusOK)

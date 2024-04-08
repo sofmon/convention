@@ -32,8 +32,9 @@ func (x *OutP2[outT, p1T, p2T]) execIfMatch(ctx convCtx.Context, w http.Response
 		p2T(values.GetByIndex(1)),
 	)
 	if err != nil {
-		if e, ok := err.(Error); ok {
-			serveError(w, e)
+		var apiErr Error
+		if errors.As(err, &apiErr) {
+			serveError(w, apiErr)
 		} else {
 			ServeError(w, ErrorCodeInternalError, err.Error())
 		}

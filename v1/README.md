@@ -34,9 +34,9 @@ HTTP Method defines expectation on request and response body communication as sh
 
 |HTTP Method|Request body|Response body|
 |---|---|---|
+|`HEAD`|-|-|
 |`GET`|-|JSON|
 |`PUT`|JSON|-|
-|`DELETE`|-|-|
 |`POST`|JSON|JSON|
 
 HTTP Status Code indicates the success of an operation:
@@ -60,7 +60,7 @@ All errors are communicate in the HTML body as a JSON object with `code` and `me
 
 ### Paths and actions
 
-HTTP `GET` and `PUT` use standard hierarchical path as:
+HTTP `HEAD`, `GET` and `PUT` use standard hierarchical path as:
 ``` HTML
 /<parent-resource>/[<parent-resource>/...]<resource>
 ```
