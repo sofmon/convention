@@ -31,9 +31,9 @@ func (x *OutP1[outT, p1T]) execIfMatch(ctx convCtx.Context, w http.ResponseWrite
 		p1T(values.GetByIndex(0)),
 	)
 	if err != nil {
-		var apiErr Error
+		var apiErr *Error
 		if errors.As(err, &apiErr) {
-			serveError(w, apiErr)
+			serveError(w, *apiErr)
 		} else {
 			ServeError(w, ErrorCodeInternalError, err.Error())
 		}

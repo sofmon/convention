@@ -40,9 +40,9 @@ func (x *InP1[inT, p1T]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter,
 		in,
 	)
 	if err != nil {
-		var apiErr Error
+		var apiErr *Error
 		if errors.As(err, &apiErr) {
-			serveError(w, apiErr)
+			serveError(w, *apiErr)
 		} else {
 			ServeError(w, ErrorCodeInternalError, err.Error())
 		}
