@@ -35,7 +35,7 @@ func WrapContext(parent context.Context, app App) (ctx Context) {
 			contextKeyApp,
 			app,
 		),
-	)
+	).WithScope(string(app)) // Use app name as the initial scope
 }
 
 func wrapWithEnv(parent context.Context) (ctx Context) {

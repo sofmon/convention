@@ -16,8 +16,6 @@ import (
 )
 
 func ListenAndServe(ctx convCtx.Context, host string, port int, svc any) (err error) {
-	ctx = ctx.WithScope("convention.api.ListenAndServe")
-	defer ctx.Exit(&err)
 
 	if port == 0 {
 		port = 443
@@ -67,8 +65,7 @@ type httpHandler struct {
 }
 
 func (h httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx := h.ctx.WithScope("convention.api.httpHandler.serveHTTP")
-	defer ctx.Exit(nil)
+	ctx := h.ctx
 
 	rec := httptest.NewRecorder()
 
