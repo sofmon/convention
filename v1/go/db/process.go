@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 )
 
-func (os ObjectSet[objT, idT, shardKeyT]) Process(where where, process func(obj objT) error, shardKeys ...shardKeyT) (count int, err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) Process(where where, process func(obj objT) error, shardKeys ...shardKeyT) (count int, err error) {
 
-	table, ok := typeToTable[os.objType]
+	table, ok := typeToTable[tos.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
@@ -15,9 +15,9 @@ func (os ObjectSet[objT, idT, shardKeyT]) Process(where where, process func(obj 
 
 	var dbs []*sql.DB
 	if table.Sharding {
-		dbs = dbsForShardKeys(shardKeys...)
+		dbs = dbsForShardKeys(tos.tenant, shardKeys...)
 	} else {
-		dbs = []*sql.DB{Default()}
+		dbs = []*sql.DB{Default(tos.tenant)}
 	}
 
 	for _, db := range dbs {

@@ -6,9 +6,9 @@ import (
 	"errors"
 )
 
-func (os ObjectSet[objT, idT, shardKeyT]) Insert(obj objT) (err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) Insert(obj objT) (err error) {
 
-	table, ok := typeToTable[os.objType]
+	table, ok := typeToTable[tos.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
@@ -18,9 +18,9 @@ func (os ObjectSet[objT, idT, shardKeyT]) Insert(obj objT) (err error) {
 
 	var db *sql.DB
 	if table.Sharding {
-		db = dbByShardKey(string(trail.ShardKey))
+		db = dbByShardKey(tos.tenant, string(trail.ShardKey))
 	} else {
-		db = Default()
+		db = Default(tos.tenant)
 	}
 
 	tx, err := db.Begin()
@@ -60,9 +60,9 @@ VALUES($1,$2,$3,$4,$5,$6)`,
 	return
 }
 
-func (os ObjectSet[objT, idT, shardKeyT]) Upsert(obj objT) (err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) Upsert(obj objT) (err error) {
 
-	table, ok := typeToTable[os.objType]
+	table, ok := typeToTable[tos.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
@@ -72,9 +72,9 @@ func (os ObjectSet[objT, idT, shardKeyT]) Upsert(obj objT) (err error) {
 
 	var db *sql.DB
 	if table.Sharding {
-		db = dbByShardKey(string(trail.ShardKey))
+		db = dbByShardKey(tos.tenant, string(trail.ShardKey))
 	} else {
-		db = Default()
+		db = Default(tos.tenant)
 	}
 
 	tx, err := db.Begin()

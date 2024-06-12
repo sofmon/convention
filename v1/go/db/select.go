@@ -6,9 +6,9 @@ import (
 	"fmt"
 )
 
-func (os ObjectSet[objT, idT, shardKeyT]) SelectAll() (obs []objT, err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) SelectAll() (obs []objT, err error) {
 
-	table, ok := typeToTable[os.objType]
+	table, ok := typeToTable[tos.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
@@ -16,9 +16,9 @@ func (os ObjectSet[objT, idT, shardKeyT]) SelectAll() (obs []objT, err error) {
 
 	var dbs []*sql.DB
 	if table.Sharding {
-		dbs = Shards()
+		dbs = Shards(tos.tenant)
 	} else {
-		dbs = []*sql.DB{Default()}
+		dbs = []*sql.DB{Default(tos.tenant)}
 	}
 
 	for _, db := range dbs {
@@ -58,9 +58,9 @@ func (os ObjectSet[objT, idT, shardKeyT]) SelectAll() (obs []objT, err error) {
 	return
 }
 
-func (os ObjectSet[objT, idT, shardKeyT]) SelectByID(id idT, shardKeys ...shardKeyT) (obj *objT, err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) SelectByID(id idT, shardKeys ...shardKeyT) (obj *objT, err error) {
 
-	table, ok := typeToTable[os.objType]
+	table, ok := typeToTable[tos.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
@@ -73,9 +73,9 @@ func (os ObjectSet[objT, idT, shardKeyT]) SelectByID(id idT, shardKeys ...shardK
 
 	var dbs []*sql.DB
 	if table.Sharding {
-		dbs = dbsForShardKeys(shardKeys...)
+		dbs = dbsForShardKeys(tos.tenant, shardKeys...)
 	} else {
-		dbs = []*sql.DB{Default()}
+		dbs = []*sql.DB{Default(tos.tenant)}
 	}
 
 	for _, db := range dbs {
@@ -120,9 +120,9 @@ func (w where) Limit(limit int) where {
 	return w
 }
 
-func (os ObjectSet[objT, idT, shardKeyT]) Select(where where, shardKeys ...shardKeyT) (obs []objT, err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) Select(where where, shardKeys ...shardKeyT) (obs []objT, err error) {
 
-	table, ok := typeToTable[os.objType]
+	table, ok := typeToTable[tos.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
@@ -130,9 +130,9 @@ func (os ObjectSet[objT, idT, shardKeyT]) Select(where where, shardKeys ...shard
 
 	var dbs []*sql.DB
 	if table.Sharding {
-		dbs = dbsForShardKeys(shardKeys...)
+		dbs = dbsForShardKeys(tos.tenant, shardKeys...)
 	} else {
-		dbs = []*sql.DB{Default()}
+		dbs = []*sql.DB{Default(tos.tenant)}
 	}
 
 	for _, db := range dbs {

@@ -7,9 +7,9 @@ import (
 	"fmt"
 )
 
-func (os ObjectSet[objT, idT, shardKeyT]) Update(obj objT) (err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) Update(obj objT) (err error) {
 
-	table, ok := typeToTable[os.objType]
+	table, ok := typeToTable[tos.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
@@ -19,9 +19,9 @@ func (os ObjectSet[objT, idT, shardKeyT]) Update(obj objT) (err error) {
 
 	var db *sql.DB
 	if table.Sharding {
-		db = dbByShardKey(string(trail.ShardKey))
+		db = dbByShardKey(tos.tenant, string(trail.ShardKey))
 	} else {
-		db = Default()
+		db = Default(tos.tenant)
 	}
 
 	tx, err := db.Begin()
@@ -59,9 +59,9 @@ func (os ObjectSet[objT, idT, shardKeyT]) Update(obj objT) (err error) {
 	return
 }
 
-func (os ObjectSet[objT, idT, shardKeyT]) SafeUpdate(from, to objT) (err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) SafeUpdate(from, to objT) (err error) {
 
-	table, ok := typeToTable[os.objType]
+	table, ok := typeToTable[tos.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
@@ -81,9 +81,9 @@ func (os ObjectSet[objT, idT, shardKeyT]) SafeUpdate(from, to objT) (err error) 
 
 	var db *sql.DB
 	if table.Sharding {
-		db = dbByShardKey(string(fromTrail.ShardKey))
+		db = dbByShardKey(tos.tenant, string(fromTrail.ShardKey))
 	} else {
-		db = Default()
+		db = Default(tos.tenant)
 	}
 
 	tx, err := db.Begin()

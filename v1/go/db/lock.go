@@ -6,13 +6,13 @@ import (
 )
 
 type Lock[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
-	os ObjectSet[objT, idT, shardKeyT]
-	sk shardKeyT
-	id idT
+	tos TenantObjectSet[objT, idT, shardKeyT]
+	sk  shardKeyT
+	id  idT
 }
 
 func (l Lock[objT, idT, shardKeyT]) Unlock() (err error) {
-	table, ok := typeToTable[l.os.objType]
+	table, ok := typeToTable[l.tos.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
@@ -20,9 +20,9 @@ func (l Lock[objT, idT, shardKeyT]) Unlock() (err error) {
 
 	var db *sql.DB
 	if table.Sharding {
-		db = dbByShardKey(string(l.sk))
+		db = dbByShardKey(l.tos.tenant, string(l.sk))
 	} else {
-		db = Default()
+		db = Default(l.tos.tenant)
 	}
 
 	_, err = db.Exec(`DELETE FROM "`+table.LockTableName+`"WHERE "id"=$1;`, l.id)
@@ -33,9 +33,9 @@ func (l Lock[objT, idT, shardKeyT]) Unlock() (err error) {
 	return
 }
 
-func (os ObjectSet[objT, idT, shardKeyT]) Lock(obj objT, desc string) (lock *Lock[objT, idT, shardKeyT], err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) Lock(obj objT, desc string) (lock *Lock[objT, idT, shardKeyT], err error) {
 
-	table, ok := typeToTable[os.objType]
+	table, ok := typeToTable[tos.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
@@ -45,9 +45,9 @@ func (os ObjectSet[objT, idT, shardKeyT]) Lock(obj objT, desc string) (lock *Loc
 
 	var db *sql.DB
 	if table.Sharding {
-		db = dbByShardKey(string(trail.ShardKey))
+		db = dbByShardKey(tos.tenant, string(trail.ShardKey))
 	} else {
-		db = Default()
+		db = Default(tos.tenant)
 	}
 
 	res, err := db.Exec(`INSERT INTO "`+table.LockTableName+`"
@@ -69,9 +69,9 @@ ON CONFLICT ("id") DO NOTHING;`,
 	}
 
 	lock = &Lock[objT, idT, shardKeyT]{
-		os: os,
-		sk: trail.ShardKey,
-		id: trail.ID,
+		tos: tos,
+		sk:  trail.ShardKey,
+		id:  trail.ID,
 	}
 
 	return

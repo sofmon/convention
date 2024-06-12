@@ -121,32 +121,36 @@ Database is configured using the `database` configuration. The configuration is 
 
 ``` JSON
 {
-    "engine": "postgres",
     "versions": {
         "v1": {
-            "default": {
-                "host":"127.0.0.1",
-                "port":0,
-                "database":"messages_default",
-                "username":"some_user",
-                "password":"some_password"
-            },
-            "shards": [
-                {
-                    "host":"127.0.0.1",
-                    "port":0,
-                    "database":"messages_shard1",
-                    "username":"some_user",
-                    "password":"some_password"
-                },
-                {
-                    "host":"127.0.0.1",
-                    "port":0,
-                    "database":"messages_shard2",
-                    "username":"some_user",
-                    "password":"some_password"
+            "engine": "postgres",
+            "tenants": {
+                "default": {
+                    "default": {
+                        "host":"127.0.0.1",
+                        "port":0,
+                        "database":"messages_default",
+                        "username":"some_user",
+                        "password":"some_password"
+                    },
+                    "shards": [
+                        {
+                            "host":"127.0.0.1",
+                            "port":0,
+                            "database":"messages_shard1",
+                            "username":"some_user",
+                            "password":"some_password"
+                        },
+                        {
+                            "host":"127.0.0.1",
+                            "port":0,
+                            "database":"messages_shard2",
+                            "username":"some_user",
+                            "password":"some_password"
+                        }
+                    ]
                 }
-            ]
+            }
         }
     }
 }

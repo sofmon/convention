@@ -17,9 +17,9 @@ func Exec(statement string, params ...any) exec {
 	}
 }
 
-func (os ObjectSet[objT, idT, shardKeyT]) Exec(exec exec, shardKeys ...shardKeyT) (err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) Exec(exec exec, shardKeys ...shardKeyT) (err error) {
 
-	table, ok := typeToTable[os.objType]
+	table, ok := typeToTable[tos.objType]
 	if !ok {
 		err = ErrObjectTypeNotRegistered
 		return
@@ -27,9 +27,9 @@ func (os ObjectSet[objT, idT, shardKeyT]) Exec(exec exec, shardKeys ...shardKeyT
 
 	var dbs []*sql.DB
 	if table.Sharding {
-		dbs = dbsForShardKeys(shardKeys...)
+		dbs = dbsForShardKeys(tos.tenant, shardKeys...)
 	} else {
-		dbs = []*sql.DB{Default()}
+		dbs = []*sql.DB{Default(tos.tenant)}
 	}
 
 	txs := make([]*sql.Tx, len(dbs))

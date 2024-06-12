@@ -52,22 +52,22 @@ func toSnakeCase(str string) string {
 	return strings.ToLower(snake)
 }
 
-func dbsForShardKeys[shardKeyT ~string](sks ...shardKeyT) []*sql.DB {
+func dbsForShardKeys[shardKeyT ~string](tenant Tenant, sks ...shardKeyT) []*sql.DB {
 
 	switch len(sks) {
 
 	case 1:
-		return []*sql.DB{dbByShardKey(string(sks[0]))}
+		return []*sql.DB{dbByShardKey(tenant, string(sks[0]))}
 
 	case 0:
-		return Shards()
+		return Shards(tenant)
 
 	default:
 		sksStr := make([]string, len(sks))
 		for i, sk := range sks {
 			sksStr[i] = string(sk)
 		}
-		return dbsByShardKeys(sksStr...)
+		return dbsByShardKeys(tenant, sksStr...)
 
 	}
 
@@ -112,17 +112,19 @@ ON "` + runtimeTableName + `" USING gin (("object"->'` + index + `'));
 `
 	}
 
-	if sharding {
-		for _, shard := range Shards() {
-			_, err = shard.Exec(createScript)
+	for tenant := range dbs {
+		if sharding {
+			for _, shard := range Shards(tenant) {
+				_, err = shard.Exec(createScript)
+				if err != nil {
+					return
+				}
+			}
+		} else {
+			_, err = Default(tenant).Exec(createScript)
 			if err != nil {
 				return
 			}
-		}
-	} else {
-		_, err = Default().Exec(createScript)
-		if err != nil {
-			return
 		}
 	}
 
@@ -148,4 +150,16 @@ func NewObjectSet[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string]()
 
 type ObjectSet[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
 	objType reflect.Type
+}
+
+func (os ObjectSet[objT, idT, shardKeyT]) Tenant(tenant Tenant) TenantObjectSet[objT, idT, shardKeyT] {
+	return TenantObjectSet[objT, idT, shardKeyT]{
+		objType: os.objType,
+		tenant:  tenant,
+	}
+}
+
+type TenantObjectSet[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
+	objType reflect.Type
+	tenant  Tenant
 }
