@@ -140,22 +140,22 @@ ON "` + runtimeTableName + `" USING gin (("object"->'` + index + `'));
 	return
 }
 
-func NewObjectSet[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string]() ObjectSet[objT, idT, shardKeyT] {
+func NewObjectSet[tenantT ~string, objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string]() ObjectSet[tenantT, objT, idT, shardKeyT] {
 	obj := new(objT)
 	objType := reflect.TypeOf(*obj)
-	return ObjectSet[objT, idT, shardKeyT]{
+	return ObjectSet[tenantT, objT, idT, shardKeyT]{
 		objType: objType,
 	}
 }
 
-type ObjectSet[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
+type ObjectSet[tenantT ~string, objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
 	objType reflect.Type
 }
 
-func (os ObjectSet[objT, idT, shardKeyT]) Tenant(tenant Tenant) TenantObjectSet[objT, idT, shardKeyT] {
+func (os ObjectSet[tenantT, objT, idT, shardKeyT]) Tenant(tenant tenantT) TenantObjectSet[objT, idT, shardKeyT] {
 	return TenantObjectSet[objT, idT, shardKeyT]{
 		objType: os.objType,
-		tenant:  tenant,
+		tenant:  Tenant(tenant),
 	}
 }
 
