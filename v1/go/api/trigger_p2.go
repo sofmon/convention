@@ -17,7 +17,7 @@ func NewTriggerP2[p1T, p2T ~string](fn func(ctx convCtx.Context, p1 p1T, p2 p2T)
 func (x *TriggerP2[p1T, p2T]) WithPreCheck(check Check) TriggerP2[p1T, p2T] {
 	return TriggerP2[p1T, p2T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T) error {
-			err := check(ctx, *ctx.Request())
+			err := check(ctx)
 			if err != nil {
 				return err
 			}
@@ -33,7 +33,7 @@ func (x *TriggerP2[p1T, p2T]) WithPostCheck(check Check) TriggerP2[p1T, p2T] {
 			if err != nil {
 				return err
 			}
-			return check(ctx, *ctx.Request())
+			return check(ctx)
 		},
 	}
 }

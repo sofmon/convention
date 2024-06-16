@@ -17,7 +17,7 @@ func NewTrigger(fn func(ctx convCtx.Context) error) Trigger {
 func (x *Trigger) WithPreCheck(check Check) Trigger {
 	return Trigger{
 		fn: func(ctx convCtx.Context) error {
-			err := check(ctx, *ctx.Request())
+			err := check(ctx)
 			if err != nil {
 				return err
 			}
@@ -33,7 +33,7 @@ func (x *Trigger) WithPostCheck(check Check) Trigger {
 			if err != nil {
 				return err
 			}
-			return check(ctx, *ctx.Request())
+			return check(ctx)
 		},
 	}
 }

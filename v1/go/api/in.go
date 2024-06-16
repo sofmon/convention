@@ -18,7 +18,7 @@ func NewIn[inT any](fn func(ctx convCtx.Context, in inT) error) In[inT] {
 func (x *In[inT]) WithPreCheck(check Check) In[inT] {
 	return In[inT]{
 		fn: func(ctx convCtx.Context, in inT) error {
-			err := check(ctx, *ctx.Request())
+			err := check(ctx)
 			if err != nil {
 				return err
 			}
@@ -34,7 +34,7 @@ func (x *In[inT]) WithPostCheck(check Check) In[inT] {
 			if err != nil {
 				return err
 			}
-			return check(ctx, *ctx.Request())
+			return check(ctx)
 		},
 	}
 }

@@ -18,7 +18,7 @@ func NewInP3[inT any, p1T, p2T, p3T ~string](fn func(ctx convCtx.Context, p1 p1T
 func (x *InP3[inT, p1T, p2T, p3T]) WithPreCheck(check Check) InP3[inT, p1T, p2T, p3T] {
 	return InP3[inT, p1T, p2T, p3T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, in inT) error {
-			err := check(ctx, *ctx.Request())
+			err := check(ctx)
 			if err != nil {
 				return err
 			}
@@ -34,7 +34,7 @@ func (x *InP3[inT, p1T, p2T, p3T]) WithPostCheck(check Check) InP3[inT, p1T, p2T
 			if err != nil {
 				return err
 			}
-			return check(ctx, *ctx.Request())
+			return check(ctx)
 		},
 	}
 }

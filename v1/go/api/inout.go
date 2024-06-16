@@ -18,7 +18,7 @@ func NewInOut[inT, outT any](fn func(ctx convCtx.Context, in inT) (outT, error))
 func (x *InOut[inT, outT]) WithPreCheck(check Check) InOut[inT, outT] {
 	return InOut[inT, outT]{
 		fn: func(ctx convCtx.Context, in inT) (res outT, err error) {
-			err = check(ctx, *ctx.Request())
+			err = check(ctx)
 			if err != nil {
 				return
 			}
@@ -34,7 +34,7 @@ func (x *InOut[inT, outT]) WithPostCheck(check Check) InOut[inT, outT] {
 			if err != nil {
 				return
 			}
-			err = check(ctx, *ctx.Request())
+			err = check(ctx)
 			if err != nil {
 				return
 			}

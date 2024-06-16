@@ -18,7 +18,7 @@ func NewRawP4[p1T, p2T, p3T, p4T ~string](fn func(ctx convCtx.Context, p1 p1T, p
 func (x *RawP4[p1T, p2T, p3T, p4T]) WithPreCheck(check Check) RawP4[p1T, p2T, p3T, p4T] {
 	return RawP4[p1T, p2T, p3T, p4T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, p4 p4T, w http.ResponseWriter, r *http.Request) {
-			err := check(ctx, *ctx.Request())
+			err := check(ctx)
 			if err != nil {
 				var apiErr *Error
 				if errors.As(err, &apiErr) {

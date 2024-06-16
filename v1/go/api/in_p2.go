@@ -18,7 +18,7 @@ func NewInP2[inT any, p1T, p2T ~string](fn func(ctx convCtx.Context, p1 p1T, p2 
 func (x *InP2[inT, p1T, p2T]) WithPreCheck(check Check) InP2[inT, p1T, p2T] {
 	return InP2[inT, p1T, p2T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, in inT) error {
-			err := check(ctx, *ctx.Request())
+			err := check(ctx)
 			if err != nil {
 				return err
 			}
@@ -34,7 +34,7 @@ func (x *InP2[inT, p1T, p2T]) WithPostCheck(check Check) InP2[inT, p1T, p2T] {
 			if err != nil {
 				return err
 			}
-			return check(ctx, *ctx.Request())
+			return check(ctx)
 		},
 	}
 }
