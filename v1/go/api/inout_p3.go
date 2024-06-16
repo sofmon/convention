@@ -15,6 +15,34 @@ func NewInOutP3[inT, outT any, p1T, p2T, p3T ~string](fn func(ctx convCtx.Contex
 	}
 }
 
+func (x *InOutP3[inT, outT, p1T, p2T, p3T]) WithPreCheck(check Check) InOutP3[inT, outT, p1T, p2T, p3T] {
+	return InOutP3[inT, outT, p1T, p2T, p3T]{
+		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, in inT) (res outT, err error) {
+			err = check(ctx, *ctx.Request())
+			if err != nil {
+				return
+			}
+			return x.fn(ctx, p1, p2, p3, in)
+		},
+	}
+}
+
+func (x *InOutP3[inT, outT, p1T, p2T, p3T]) WithPostCheck(check Check) InOutP3[inT, outT, p1T, p2T, p3T] {
+	return InOutP3[inT, outT, p1T, p2T, p3T]{
+		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, in inT) (res outT, err error) {
+			res, err = x.fn(ctx, p1, p2, p3, in)
+			if err != nil {
+				return
+			}
+			err = check(ctx, *ctx.Request())
+			if err != nil {
+				return
+			}
+			return
+		},
+	}
+}
+
 type InOutP3[inT, outT any, p1T, p2T, p3T ~string] struct {
 	descriptor descriptor
 	fn         func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, in inT) (outT, error)
@@ -30,7 +58,7 @@ func (x *InOutP3[inT, outT, p1T, p2T, p3T]) execIfMatch(ctx convCtx.Context, w h
 	var in inT
 	err := json.NewDecoder(r.Body).Decode(&in)
 	if err != nil {
-		ServeError(w, ErrorCodeBadRequest, err.Error())
+		ServeError(w, http.StatusBadRequest, ErrorCodeBadRequest, err.Error())
 		return true
 	}
 
@@ -46,7 +74,7 @@ func (x *InOutP3[inT, outT, p1T, p2T, p3T]) execIfMatch(ctx convCtx.Context, w h
 		if errors.As(err, &apiErr) {
 			serveError(w, *apiErr)
 		} else {
-			ServeError(w, ErrorCodeInternalError, err.Error())
+			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 		}
 	} else {
 		ServeJSON(w, out)

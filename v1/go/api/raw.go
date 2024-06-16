@@ -15,6 +15,24 @@ func NewRaw(fn func(ctx convCtx.Context, w http.ResponseWriter, r *http.Request)
 	}
 }
 
+func (x *Raw) WithPreCheck(check Check) Raw {
+	return Raw{
+		fn: func(ctx convCtx.Context, w http.ResponseWriter, r *http.Request) {
+			err := check(ctx, *ctx.Request())
+			if err != nil {
+				var apiErr *Error
+				if errors.As(err, &apiErr) {
+					serveError(w, *apiErr)
+				} else {
+					ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
+				}
+			}
+
+			x.fn(ctx, w, r)
+		},
+	}
+}
+
 type Raw struct {
 	descriptor descriptor
 	fn         func(ctx convCtx.Context, w http.ResponseWriter, r *http.Request)

@@ -14,6 +14,30 @@ func NewTriggerP1[p1T ~string](fn func(ctx convCtx.Context, p1 p1T) error) Trigg
 	}
 }
 
+func (x *TriggerP1[p1T]) WithPreCheck(check Check) TriggerP1[p1T] {
+	return TriggerP1[p1T]{
+		fn: func(ctx convCtx.Context, p1 p1T) error {
+			err := check(ctx, *ctx.Request())
+			if err != nil {
+				return err
+			}
+			return x.fn(ctx, p1)
+		},
+	}
+}
+
+func (x *TriggerP1[p1T]) WithPostCheck(check Check) TriggerP1[p1T] {
+	return TriggerP1[p1T]{
+		fn: func(ctx convCtx.Context, p1 p1T) error {
+			err := x.fn(ctx, p1)
+			if err != nil {
+				return err
+			}
+			return check(ctx, *ctx.Request())
+		},
+	}
+}
+
 type TriggerP1[p1T ~string] struct {
 	descriptor descriptor
 	fn         func(ctx convCtx.Context, p1 p1T) error
@@ -35,7 +59,7 @@ func (x *TriggerP1[p1T]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter,
 		if errors.As(err, &apiErr) {
 			serveError(w, *apiErr)
 		} else {
-			ServeError(w, ErrorCodeInternalError, err.Error())
+			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 		}
 	} else {
 		w.WriteHeader(http.StatusOK)

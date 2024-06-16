@@ -14,6 +14,30 @@ func NewTrigger(fn func(ctx convCtx.Context) error) Trigger {
 	}
 }
 
+func (x *Trigger) WithPreCheck(check Check) Trigger {
+	return Trigger{
+		fn: func(ctx convCtx.Context) error {
+			err := check(ctx, *ctx.Request())
+			if err != nil {
+				return err
+			}
+			return x.fn(ctx)
+		},
+	}
+}
+
+func (x *Trigger) WithPostCheck(check Check) Trigger {
+	return Trigger{
+		fn: func(ctx convCtx.Context) error {
+			err := x.fn(ctx)
+			if err != nil {
+				return err
+			}
+			return check(ctx, *ctx.Request())
+		},
+	}
+}
+
 type Trigger struct {
 	descriptor descriptor
 	fn         func(ctx convCtx.Context) error
@@ -32,7 +56,7 @@ func (x *Trigger) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 		if errors.As(err, &apiErr) {
 			serveError(w, *apiErr)
 		} else {
-			ServeError(w, ErrorCodeInternalError, err.Error())
+			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 		}
 	} else {
 		w.WriteHeader(http.StatusOK)

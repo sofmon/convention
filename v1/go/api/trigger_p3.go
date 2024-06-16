@@ -14,6 +14,30 @@ func NewTriggerP3[p1T, p2T, p3T ~string](fn func(ctx convCtx.Context, p1 p1T, p2
 	}
 }
 
+func (x *TriggerP3[p1T, p2T, p3T]) WithPreCheck(check Check) TriggerP3[p1T, p2T, p3T] {
+	return TriggerP3[p1T, p2T, p3T]{
+		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T) error {
+			err := check(ctx, *ctx.Request())
+			if err != nil {
+				return err
+			}
+			return x.fn(ctx, p1, p2, p3)
+		},
+	}
+}
+
+func (x *TriggerP3[p1T, p2T, p3T]) WithPostCheck(check Check) TriggerP3[p1T, p2T, p3T] {
+	return TriggerP3[p1T, p2T, p3T]{
+		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T) error {
+			err := x.fn(ctx, p1, p2, p3)
+			if err != nil {
+				return err
+			}
+			return check(ctx, *ctx.Request())
+		},
+	}
+}
+
 type TriggerP3[p1T, p2T, p3T ~string] struct {
 	descriptor descriptor
 	fn         func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T) error
@@ -37,7 +61,7 @@ func (x *TriggerP3[p1T, p2T, p3T]) execIfMatch(ctx convCtx.Context, w http.Respo
 		if errors.As(err, &apiErr) {
 			serveError(w, *apiErr)
 		} else {
-			ServeError(w, ErrorCodeInternalError, err.Error())
+			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 		}
 	} else {
 		w.WriteHeader(http.StatusOK)

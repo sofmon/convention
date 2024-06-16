@@ -14,6 +14,34 @@ func NewOut[outT any](fn func(ctx convCtx.Context) (outT, error)) Out[outT] {
 	}
 }
 
+func (x *Out[outT]) WithPreCheck(check Check) Out[outT] {
+	return Out[outT]{
+		fn: func(ctx convCtx.Context) (res outT, err error) {
+			err = check(ctx, *ctx.Request())
+			if err != nil {
+				return
+			}
+			return x.fn(ctx)
+		},
+	}
+}
+
+func (x *Out[outT]) WithPostCheck(check Check) Out[outT] {
+	return Out[outT]{
+		fn: func(ctx convCtx.Context) (res outT, err error) {
+			res, err = x.fn(ctx)
+			if err != nil {
+				return
+			}
+			err = check(ctx, *ctx.Request())
+			if err != nil {
+				return
+			}
+			return
+		},
+	}
+}
+
 type Out[outT any] struct {
 	descriptor descriptor
 	fn         func(ctx convCtx.Context) (outT, error)
@@ -32,7 +60,7 @@ func (x *Out[outT]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *h
 		if errors.As(err, &apiErr) {
 			serveError(w, *apiErr)
 		} else {
-			ServeError(w, ErrorCodeInternalError, err.Error())
+			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 		}
 	} else {
 		ServeJSON(w, out)

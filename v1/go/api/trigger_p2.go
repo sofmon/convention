@@ -14,6 +14,30 @@ func NewTriggerP2[p1T, p2T ~string](fn func(ctx convCtx.Context, p1 p1T, p2 p2T)
 	}
 }
 
+func (x *TriggerP2[p1T, p2T]) WithPreCheck(check Check) TriggerP2[p1T, p2T] {
+	return TriggerP2[p1T, p2T]{
+		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T) error {
+			err := check(ctx, *ctx.Request())
+			if err != nil {
+				return err
+			}
+			return x.fn(ctx, p1, p2)
+		},
+	}
+}
+
+func (x *TriggerP2[p1T, p2T]) WithPostCheck(check Check) TriggerP2[p1T, p2T] {
+	return TriggerP2[p1T, p2T]{
+		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T) error {
+			err := x.fn(ctx, p1, p2)
+			if err != nil {
+				return err
+			}
+			return check(ctx, *ctx.Request())
+		},
+	}
+}
+
 type TriggerP2[p1T, p2T ~string] struct {
 	descriptor descriptor
 	fn         func(ctx convCtx.Context, p1 p1T, p2 p2T) error
@@ -36,7 +60,7 @@ func (x *TriggerP2[p1T, p2T]) execIfMatch(ctx convCtx.Context, w http.ResponseWr
 		if errors.As(err, &apiErr) {
 			serveError(w, *apiErr)
 		} else {
-			ServeError(w, ErrorCodeInternalError, err.Error())
+			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 		}
 	} else {
 		w.WriteHeader(http.StatusOK)

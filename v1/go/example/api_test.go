@@ -1,6 +1,7 @@
 package example
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
@@ -44,7 +45,7 @@ func Test_server_and_client(t *testing.T) {
 		PutUser: convAPI.NewInP1(
 			func(ctx convCtx.Context, uid UserID, user User) error {
 				if user.UserID != uid {
-					return convAPI.NewError("bad_request", "mismatch between user_id in path and body")
+					return convAPI.NewError(http.StatusBadRequest, "bad_request", "mismatch between user_id in path and body")
 				}
 				userDB[user.UserID] = user
 				return nil
@@ -54,7 +55,7 @@ func Test_server_and_client(t *testing.T) {
 			func(ctx convCtx.Context, uid UserID) (User, error) {
 				user, ok := userDB[uid]
 				if !ok {
-					return User{}, convAPI.NewError("not_found", "user not found")
+					return User{}, convAPI.NewError(http.StatusNotFound, "not_found", "user not found")
 				}
 				return user, nil
 			},

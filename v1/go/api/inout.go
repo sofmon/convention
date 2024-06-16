@@ -15,6 +15,34 @@ func NewInOut[inT, outT any](fn func(ctx convCtx.Context, in inT) (outT, error))
 	}
 }
 
+func (x *InOut[inT, outT]) WithPreCheck(check Check) InOut[inT, outT] {
+	return InOut[inT, outT]{
+		fn: func(ctx convCtx.Context, in inT) (res outT, err error) {
+			err = check(ctx, *ctx.Request())
+			if err != nil {
+				return
+			}
+			return x.fn(ctx, in)
+		},
+	}
+}
+
+func (x *InOut[inT, outT]) WithPostCheck(check Check) InOut[inT, outT] {
+	return InOut[inT, outT]{
+		fn: func(ctx convCtx.Context, in inT) (res outT, err error) {
+			res, err = x.fn(ctx, in)
+			if err != nil {
+				return
+			}
+			err = check(ctx, *ctx.Request())
+			if err != nil {
+				return
+			}
+			return
+		},
+	}
+}
+
 type InOut[inT, outT any] struct {
 	descriptor descriptor
 	fn         func(ctx convCtx.Context, in inT) (outT, error)
@@ -30,7 +58,7 @@ func (x *InOut[inT, outT]) execIfMatch(ctx convCtx.Context, w http.ResponseWrite
 	var in inT
 	err := json.NewDecoder(r.Body).Decode(&in)
 	if err != nil {
-		ServeError(w, ErrorCodeBadRequest, err.Error())
+		ServeError(w, http.StatusBadRequest, ErrorCodeBadRequest, err.Error())
 		return true
 	}
 
@@ -40,7 +68,7 @@ func (x *InOut[inT, outT]) execIfMatch(ctx convCtx.Context, w http.ResponseWrite
 		if errors.As(err, &apiErr) {
 			serveError(w, *apiErr)
 		} else {
-			ServeError(w, ErrorCodeInternalError, err.Error())
+			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 		}
 	} else {
 		ServeJSON(w, out)

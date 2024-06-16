@@ -15,6 +15,24 @@ func NewRawP3[p1T, p2T, p3T ~string](fn func(ctx convCtx.Context, p1 p1T, p2 p2T
 	}
 }
 
+func (x *RawP3[p1T, p2T, p3T]) WithPreCheck(check Check) RawP3[p1T, p2T, p3T] {
+	return RawP3[p1T, p2T, p3T]{
+		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, w http.ResponseWriter, r *http.Request) {
+			err := check(ctx, *ctx.Request())
+			if err != nil {
+				var apiErr *Error
+				if errors.As(err, &apiErr) {
+					serveError(w, *apiErr)
+				} else {
+					ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
+				}
+			}
+
+			x.fn(ctx, p1, p2, p3, w, r)
+		},
+	}
+}
+
 type RawP3[p1T, p2T, p3T ~string] struct {
 	descriptor descriptor
 	fn         func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, w http.ResponseWriter, r *http.Request)

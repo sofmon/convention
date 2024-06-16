@@ -99,7 +99,7 @@ func (h httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !ok {
-		ServeError(rec, ErrorCodeNotFound, "Endpoint not found")
+		ServeError(rec, http.StatusNotFound, ErrorCodeNotFound, "Endpoint not found")
 	}
 
 	res := rec.Result()
