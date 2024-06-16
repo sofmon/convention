@@ -14,7 +14,7 @@ func NewTriggerP3[p1T, p2T, p3T ~string](fn func(ctx convCtx.Context, p1 p1T, p2
 	}
 }
 
-func (x *TriggerP3[p1T, p2T, p3T]) WithPreCheck(check Check) TriggerP3[p1T, p2T, p3T] {
+func (x TriggerP3[p1T, p2T, p3T]) WithPreCheck(check Check) TriggerP3[p1T, p2T, p3T] {
 	return TriggerP3[p1T, p2T, p3T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T) error {
 			err := check(ctx)
@@ -26,7 +26,7 @@ func (x *TriggerP3[p1T, p2T, p3T]) WithPreCheck(check Check) TriggerP3[p1T, p2T,
 	}
 }
 
-func (x *TriggerP3[p1T, p2T, p3T]) WithPostCheck(check Check) TriggerP3[p1T, p2T, p3T] {
+func (x TriggerP3[p1T, p2T, p3T]) WithPostCheck(check Check) TriggerP3[p1T, p2T, p3T] {
 	return TriggerP3[p1T, p2T, p3T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T) error {
 			err := x.fn(ctx, p1, p2, p3)

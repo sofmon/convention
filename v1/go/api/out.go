@@ -14,7 +14,7 @@ func NewOut[outT any](fn func(ctx convCtx.Context) (outT, error)) Out[outT] {
 	}
 }
 
-func (x *Out[outT]) WithPreCheck(check Check) Out[outT] {
+func (x Out[outT]) WithPreCheck(check Check) Out[outT] {
 	return Out[outT]{
 		fn: func(ctx convCtx.Context) (res outT, err error) {
 			err = check(ctx)
@@ -26,7 +26,7 @@ func (x *Out[outT]) WithPreCheck(check Check) Out[outT] {
 	}
 }
 
-func (x *Out[outT]) WithPostCheck(check Check) Out[outT] {
+func (x Out[outT]) WithPostCheck(check Check) Out[outT] {
 	return Out[outT]{
 		fn: func(ctx convCtx.Context) (res outT, err error) {
 			res, err = x.fn(ctx)

@@ -15,7 +15,7 @@ func NewInOutP2[inT, outT any, p1T, p2T ~string](fn func(ctx convCtx.Context, p1
 	}
 }
 
-func (x *InOutP2[inT, outT, p1T, p2T]) WithPreCheck(check Check) InOutP2[inT, outT, p1T, p2T] {
+func (x InOutP2[inT, outT, p1T, p2T]) WithPreCheck(check Check) InOutP2[inT, outT, p1T, p2T] {
 	return InOutP2[inT, outT, p1T, p2T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, in inT) (res outT, err error) {
 			err = check(ctx)
@@ -27,7 +27,7 @@ func (x *InOutP2[inT, outT, p1T, p2T]) WithPreCheck(check Check) InOutP2[inT, ou
 	}
 }
 
-func (x *InOutP2[inT, outT, p1T, p2T]) WithPostCheck(check Check) InOutP2[inT, outT, p1T, p2T] {
+func (x InOutP2[inT, outT, p1T, p2T]) WithPostCheck(check Check) InOutP2[inT, outT, p1T, p2T] {
 	return InOutP2[inT, outT, p1T, p2T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, in inT) (res outT, err error) {
 			res, err = x.fn(ctx, p1, p2, in)

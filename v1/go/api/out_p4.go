@@ -14,7 +14,7 @@ func NewOutP4[outT any, p1T, p2T, p3T, p4T ~string](fn func(ctx convCtx.Context,
 	}
 }
 
-func (x *OutP4[outT, p1T, p2T, p3T, p4T]) WithPreCheck(check Check) OutP4[outT, p1T, p2T, p3T, p4T] {
+func (x OutP4[outT, p1T, p2T, p3T, p4T]) WithPreCheck(check Check) OutP4[outT, p1T, p2T, p3T, p4T] {
 	return OutP4[outT, p1T, p2T, p3T, p4T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, p4 p4T) (res outT, err error) {
 			err = check(ctx)
@@ -26,7 +26,7 @@ func (x *OutP4[outT, p1T, p2T, p3T, p4T]) WithPreCheck(check Check) OutP4[outT, 
 	}
 }
 
-func (x *OutP4[outT, p1T, p2T, p3T, p4T]) WithPostCheck(check Check) OutP4[outT, p1T, p2T, p3T, p4T] {
+func (x OutP4[outT, p1T, p2T, p3T, p4T]) WithPostCheck(check Check) OutP4[outT, p1T, p2T, p3T, p4T] {
 	return OutP4[outT, p1T, p2T, p3T, p4T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, p4 p4T) (res outT, err error) {
 			res, err = x.fn(ctx, p1, p2, p3, p4)

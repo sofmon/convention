@@ -15,7 +15,7 @@ func NewInP4[inT any, p1T, p2T, p3T, p4T ~string](fn func(ctx convCtx.Context, p
 	}
 }
 
-func (x *InP4[inT, p1T, p2T, p3T, p4T]) WithPreCheck(check Check) InP4[inT, p1T, p2T, p3T, p4T] {
+func (x InP4[inT, p1T, p2T, p3T, p4T]) WithPreCheck(check Check) InP4[inT, p1T, p2T, p3T, p4T] {
 	return InP4[inT, p1T, p2T, p3T, p4T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, p4 p4T, in inT) error {
 			err := check(ctx)
@@ -27,7 +27,7 @@ func (x *InP4[inT, p1T, p2T, p3T, p4T]) WithPreCheck(check Check) InP4[inT, p1T,
 	}
 }
 
-func (x *InP4[inT, p1T, p2T, p3T, p4T]) WithPostCheck(check Check) InP4[inT, p1T, p2T, p3T, p4T] {
+func (x InP4[inT, p1T, p2T, p3T, p4T]) WithPostCheck(check Check) InP4[inT, p1T, p2T, p3T, p4T] {
 	return InP4[inT, p1T, p2T, p3T, p4T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, p4 p4T, in inT) error {
 

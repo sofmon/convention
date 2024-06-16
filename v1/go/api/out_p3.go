@@ -14,7 +14,7 @@ func NewOutP3[outT any, p1T, p2T, p3T ~string](fn func(ctx convCtx.Context, p1 p
 	}
 }
 
-func (x *OutP3[outT, p1T, p2T, p3T]) WithPreCheck(check Check) OutP3[outT, p1T, p2T, p3T] {
+func (x OutP3[outT, p1T, p2T, p3T]) WithPreCheck(check Check) OutP3[outT, p1T, p2T, p3T] {
 	return OutP3[outT, p1T, p2T, p3T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T) (res outT, err error) {
 			err = check(ctx)
@@ -26,7 +26,7 @@ func (x *OutP3[outT, p1T, p2T, p3T]) WithPreCheck(check Check) OutP3[outT, p1T, 
 	}
 }
 
-func (x *OutP3[outT, p1T, p2T, p3T]) WithPostCheck(check Check) OutP3[outT, p1T, p2T, p3T] {
+func (x OutP3[outT, p1T, p2T, p3T]) WithPostCheck(check Check) OutP3[outT, p1T, p2T, p3T] {
 	return OutP3[outT, p1T, p2T, p3T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T) (res outT, err error) {
 			res, err = x.fn(ctx, p1, p2, p3)

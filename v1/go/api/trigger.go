@@ -14,7 +14,7 @@ func NewTrigger(fn func(ctx convCtx.Context) error) Trigger {
 	}
 }
 
-func (x *Trigger) WithPreCheck(check Check) Trigger {
+func (x Trigger) WithPreCheck(check Check) Trigger {
 	return Trigger{
 		fn: func(ctx convCtx.Context) error {
 			err := check(ctx)
@@ -26,7 +26,7 @@ func (x *Trigger) WithPreCheck(check Check) Trigger {
 	}
 }
 
-func (x *Trigger) WithPostCheck(check Check) Trigger {
+func (x Trigger) WithPostCheck(check Check) Trigger {
 	return Trigger{
 		fn: func(ctx convCtx.Context) error {
 			err := x.fn(ctx)

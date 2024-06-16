@@ -15,7 +15,7 @@ func NewRaw(fn func(ctx convCtx.Context, w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (x *Raw) WithPreCheck(check Check) Raw {
+func (x Raw) WithPreCheck(check Check) Raw {
 	return Raw{
 		fn: func(ctx convCtx.Context, w http.ResponseWriter, r *http.Request) {
 			err := check(ctx)

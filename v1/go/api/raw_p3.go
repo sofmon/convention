@@ -15,7 +15,7 @@ func NewRawP3[p1T, p2T, p3T ~string](fn func(ctx convCtx.Context, p1 p1T, p2 p2T
 	}
 }
 
-func (x *RawP3[p1T, p2T, p3T]) WithPreCheck(check Check) RawP3[p1T, p2T, p3T] {
+func (x RawP3[p1T, p2T, p3T]) WithPreCheck(check Check) RawP3[p1T, p2T, p3T] {
 	return RawP3[p1T, p2T, p3T]{
 		fn: func(ctx convCtx.Context, p1 p1T, p2 p2T, p3 p3T, w http.ResponseWriter, r *http.Request) {
 			err := check(ctx)
