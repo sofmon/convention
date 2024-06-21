@@ -49,12 +49,12 @@ func DecodeHTTPRequestClaims(r *http.Request) (Claims, error) {
 		return nil, ErrMissingAuthorizationHeader
 	}
 
-	return decodeToken(authSplit[1])
+	return DecodeToken(authSplit[1])
 }
 
 func EncodeHTTPRequestClaims(r *http.Request, claims Claims) error {
 
-	token, err := generateToken(claims)
+	token, err := GenerateToken(claims)
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func EncodeHTTPRequestClaims(r *http.Request, claims Claims) error {
 	return nil
 }
 
-func generateToken(claims map[string]any) (string, error) {
+func GenerateToken(claims map[string]any) (string, error) {
 
 	hmac, err := getHmacSecret()
 	if err != nil {
@@ -79,7 +79,7 @@ func generateToken(claims map[string]any) (string, error) {
 	return tokenString, nil
 }
 
-func decodeToken(tokenString string) (Claims, error) {
+func DecodeToken(tokenString string) (Claims, error) {
 
 	hmac, err := getHmacSecret()
 	if err != nil {
