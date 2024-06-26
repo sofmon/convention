@@ -22,8 +22,16 @@ func newDescriptor(host string, port int, pattern string) (desc descriptor) {
 		segmentsSplit = strings.Split(strings.Trim(pattern, "/"), "/")
 	}
 
+	desc.openAfter = -1
+
 	weight := 0
-	for _, s := range segmentsSplit {
+	for i, s := range segmentsSplit {
+
+		if s == "{any...}" && i == len(segmentsSplit)-1 {
+			desc.openAfter = i
+			break
+		}
+
 		isParam := strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}")
 		if isParam {
 			s = strings.TrimLeft(s, "{")
@@ -43,11 +51,12 @@ func newDescriptor(host string, port int, pattern string) (desc descriptor) {
 }
 
 type descriptor struct {
-	host     string
-	port     int
-	method   string
-	segments []urlSegment
-	weight   int
+	host      string
+	port      int
+	method    string
+	segments  []urlSegment
+	weight    int
+	openAfter int
 }
 
 func (desc *descriptor) isSet() bool {
@@ -68,12 +77,20 @@ func (desc *descriptor) match(r *http.Request) (values values, match bool) {
 
 	urlSplit := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
-	match = len(urlSplit) == len(desc.segments)
-	if !match {
-		return
+	if desc.openAfter == -1 {
+		match = len(urlSplit) == len(desc.segments)
+		if !match {
+			return
+		}
 	}
 
 	for i, segment := range desc.segments {
+
+		if i == desc.openAfter {
+			match = true
+			return
+		}
+
 		if segment.param {
 			values.Add(segment.value, urlSplit[i])
 			continue
