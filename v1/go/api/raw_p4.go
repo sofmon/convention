@@ -26,6 +26,7 @@ func (x RawP4[p1T, p2T, p3T, p4T]) WithPreCheck(check Check) RawP4[p1T, p2T, p3T
 				} else {
 					ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 				}
+				return
 			}
 
 			x.fn(ctx, p1, p2, p3, p4, w, r)
