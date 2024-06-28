@@ -70,6 +70,11 @@ func (desc *descriptor) match(r *http.Request) (values values, match bool) {
 
 	urlSplit := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
+	if len(urlSplit) < len(desc.segments) {
+		match = false
+		return
+	}
+
 	segmentsCountMatch := len(urlSplit) == len(desc.segments)
 
 	if !desc.open && !segmentsCountMatch {

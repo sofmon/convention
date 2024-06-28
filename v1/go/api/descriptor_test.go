@@ -12,13 +12,15 @@ func Test_descriptor(t *testing.T) {
 		"GET /api/v1/p1":             {Method: "GET", URL: &url.URL{Path: "/api/v1/p1"}},
 		"GET /api/v1/{any...}":       {Method: "GET", URL: &url.URL{Path: "/api/v1/p2"}},
 		"GET /{any...}":              {Method: "GET", URL: &url.URL{Path: "/anything/else"}},
-		"GET /api/{value1}/{any...}": {Method: "GET", URL: &url.URL{Path: "/api/v1/p2"}},
+		"GET /api/{value1}/{any...}": {Method: "GET", URL: &url.URL{Path: "/api/v1/p2/p3/p4/p5"}},
+		"GET /api/{value2}/{any...}": {Method: "GET", URL: &url.URL{Path: "/api/v1/"}},
 	}
 
 	notMatch := map[string]*http.Request{
-		"GET /api/v1/any":      {Method: "POST", URL: &url.URL{Path: "/api/v1/any"}},
-		"GET /api/v2/{any...}": {Method: "GET", URL: &url.URL{Path: "/api/v1/p2"}},
-		"GET /api/{any...}":    {Method: "GET", URL: &url.URL{Path: "/anything/else"}},
+		"GET /api/v1/any":            {Method: "POST", URL: &url.URL{Path: "/api/v1/any"}},
+		"GET /api/v2/{any...}":       {Method: "GET", URL: &url.URL{Path: "/api/v1/p2"}},
+		"GET /api/{any...}":          {Method: "GET", URL: &url.URL{Path: "/anything/else"}},
+		"GET /api/{value2}/{any...}": {Method: "GET", URL: &url.URL{Path: "/api/"}},
 	}
 
 	for path, req := range match {
