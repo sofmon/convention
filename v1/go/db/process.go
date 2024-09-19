@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 )
 
 func (tos TenantObjectSet[objT, idT, shardKeyT]) Process(where where, process func(obj objT) error, shardKeys ...shardKeyT) (count int, err error) {
@@ -20,10 +21,16 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) Process(where where, process fu
 		dbs = []*sql.DB{Default(tos.tenant)}
 	}
 
+	statement, params, err := where.statement()
+	if err != nil {
+		err = fmt.Errorf("error building where statement: %w", err)
+		return
+	}
+
 	for _, db := range dbs {
 
 		var rows *sql.Rows
-		rows, err = db.Query(`SELECT "object" FROM "`+table.RuntimeTableName+`" WHERE `+where.statement, where.params...)
+		rows, err = db.Query(`SELECT "object" FROM "`+table.RuntimeTableName+`" WHERE `+statement, params...)
 		if err == sql.ErrNoRows {
 			err = nil
 			continue
