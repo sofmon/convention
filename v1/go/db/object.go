@@ -109,7 +109,7 @@ func RegisterObject[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string]
 "text_search" tsvector GENERATED ALWAYS AS (jsonb_to_tsvector('english', "object", '["all"]')) STORED`
 	}
 
-	createScript += `,
+	createScript += `
 );
 CREATE TABLE IF NOT EXISTS "` + historyTableName + `" (
 "id" text NOT NULL,
