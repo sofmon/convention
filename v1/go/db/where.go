@@ -19,7 +19,7 @@ type where struct {
 }
 
 func (w *where) statement() (string, []any, error) {
-	if w.err == nil {
+	if w == nil {
 		return "", nil, errors.New("where statement is nil")
 	}
 	return w.query.String(), w.params, w.err
