@@ -134,7 +134,7 @@ func (w *where) And() *where {
 }
 
 func (w *where) Search(text string) *where {
-	_, w.err = w.query.WriteString(`"text_search" @@ to_tsquery('english', $` + strconv.Itoa(len(w.params)+1))
+	_, w.err = w.query.WriteString(`"text_search" @@ to_tsquery('english', $` + strconv.Itoa(len(w.params)+1) + `)`)
 	w.params = append(w.params, toTSQuery(text))
 	return w
 }
