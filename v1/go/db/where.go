@@ -65,7 +65,7 @@ func (w *where) Equals() *where {
 	if w.err != nil {
 		return w
 	}
-	_, w.err = w.query.WriteString(`=`)
+	_, w.err = w.query.WriteRune('=')
 	return w
 }
 
@@ -81,7 +81,7 @@ func (w *where) GreaterThan() *where {
 	if w.err != nil {
 		return w
 	}
-	_, w.err = w.query.WriteString(`>`)
+	_, w.err = w.query.WriteRune('>')
 	return w
 }
 
@@ -97,7 +97,7 @@ func (w *where) LessThan() *where {
 	if w.err != nil {
 		return w
 	}
-	_, w.err = w.query.WriteString(`<`)
+	_, w.err = w.query.WriteRune('<')
 	return w
 }
 
@@ -123,6 +123,36 @@ func (w *where) Value(value any) *where {
 	return w
 }
 
+func (w *where) Values(values ...any) *where {
+	if w.err != nil {
+		return w
+	}
+	_, w.err = w.query.WriteRune('(')
+	if w.err != nil {
+		return w
+	}
+	for i, value := range values {
+		if i > 0 {
+			_, w.err = w.query.WriteString(`,`)
+			if w.err != nil {
+				return w
+			}
+		}
+		_, w.err = w.query.WriteString(`$` + strconv.Itoa(len(w.params)+1))
+		if w.err != nil {
+			return w
+		}
+		var jsonValue []byte
+		jsonValue, w.err = json.Marshal(value)
+		if w.err != nil {
+			return w
+		}
+		w.params = append(w.params, string(jsonValue))
+	}
+	_, w.err = w.query.WriteRune(')')
+	return w
+}
+
 func (w *where) Or() *where {
 	_, w.err = w.query.WriteString(` OR `)
 	return w
@@ -130,6 +160,16 @@ func (w *where) Or() *where {
 
 func (w *where) And() *where {
 	_, w.err = w.query.WriteString(` AND `)
+	return w
+}
+
+func (w *where) In() *where {
+	_, w.err = w.query.WriteString(` IN `)
+	return w
+}
+
+func (w *where) NotIn() *where {
+	_, w.err = w.query.WriteString(` NOT IN `)
 	return w
 }
 
