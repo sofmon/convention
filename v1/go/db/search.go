@@ -3,8 +3,8 @@ package db
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -80,7 +80,7 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) SearchWhere(text string, where 
 	for _, db := range dbs {
 
 		var rows *sql.Rows
-		rows, err = db.Query(`SELECT "object" FROM "`+table.RuntimeTableName+`" WHERE (`+where.statement+`) AND "text_search" @@ to_tsquery('english', $`+fmt.Sprintf("%s", len(params)+1)+`)`, params...)
+		rows, err = db.Query(`SELECT "object" FROM "`+table.RuntimeTableName+`" WHERE (`+where.statement+`) AND "text_search" @@ to_tsquery('english', $`+strconv.Itoa(len(params)+1)+`)`, params...)
 		if err == sql.ErrNoRows {
 			err = nil
 			continue
