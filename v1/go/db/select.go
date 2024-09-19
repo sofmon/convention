@@ -103,7 +103,7 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) SelectByID(id idT, shardKeys ..
 	return
 }
 
-func (tos TenantObjectSet[objT, idT, shardKeyT]) Select(where where, shardKeys ...shardKeyT) (obs []objT, err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) Select(where *where, shardKeys ...shardKeyT) (obs []objT, err error) {
 
 	table, ok := typeToTable[tos.objType]
 	if !ok {
