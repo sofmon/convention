@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
@@ -29,11 +30,14 @@ type dbTable struct {
 	HistoryTableName string
 	LockTableName    string
 	Sharding         bool
+	TextSearch       bool
 }
 
 const (
 	historySuffix = "_history"
 	lockSuffix    = "_lock"
+
+	textSearchIndex = "text_search"
 )
 
 var (
@@ -73,7 +77,16 @@ func dbsForShardKeys[shardKeyT ~string](tenant Tenant, sks ...shardKeyT) []*sql.
 
 }
 
-func RegisterObject[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](sharding bool, indexes ...string) (err error) {
+func RegisterObject[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](sharding, textSearch bool, indexes ...string) (err error) {
+
+	if len(indexes) != 0 {
+		for _, index := range indexes {
+			if index == textSearchIndex {
+				err = fmt.Errorf("cannot use '%s' as an index field as it is reserved for text search", textSearchIndex)
+				return
+			}
+		}
+	}
 
 	obj := new(objT)
 	objType := reflect.TypeOf(*obj)
@@ -89,7 +102,14 @@ func RegisterObject[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string]
 "created_by" text NOT NULL,
 "updated_at" timestamp DEFAULT now(),
 "updated_by" text NOT NULL,
-"object" JSONB NULL
+"object" JSONB NULL`
+
+	if textSearch {
+		createScript += `,
+"text_search" tsvector GENERATED ALWAYS AS (jsonb_to_tsvector('english', "object", '["all"]')) STORED`
+	}
+
+	createScript += `,
 );
 CREATE TABLE IF NOT EXISTS "` + historyTableName + `" (
 "id" text NOT NULL,
@@ -109,6 +129,12 @@ CREATE TABLE IF NOT EXISTS "` + lockTableName + `" (
 	for _, index := range indexes {
 		createScript += `CREATE INDEX IF NOT EXISTS "` + runtimeTableName + `_` + index + `"
 ON "` + runtimeTableName + `" USING gin (("object"->'` + index + `'));
+`
+	}
+
+	if textSearch {
+		createScript += `CREATE INDEX IF NOT EXISTS "` + runtimeTableName + `_` + textSearchIndex + `"
+ON "` + runtimeTableName + `" USING gin ("text_search");
 `
 	}
 
@@ -135,6 +161,7 @@ ON "` + runtimeTableName + `" USING gin (("object"->'` + index + `'));
 		HistoryTableName: historyTableName,
 		LockTableName:    lockTableName,
 		Sharding:         sharding,
+		TextSearch:       textSearch,
 	}
 
 	return

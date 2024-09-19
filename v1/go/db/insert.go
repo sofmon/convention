@@ -51,7 +51,7 @@ VALUES($1,$2,$3,$4,$5,$6)`,
 		return
 	}
 
-	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT * FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
+	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT "id", "created_at", "created_by", "updated_at", "updated_by", "object" FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
 		trail.ID)
 	if err != nil {
 		return
@@ -107,7 +107,7 @@ DO UPDATE SET "updated_at"=$4,"updated_by"=$5,"object"=$6`,
 		return
 	}
 
-	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT * FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
+	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT "id", "created_at", "created_by", "updated_at", "updated_by", "object" FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
 		trail.ID)
 	if err != nil {
 		return

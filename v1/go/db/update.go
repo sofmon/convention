@@ -50,7 +50,7 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) Update(obj objT) (err error) {
 		return
 	}
 
-	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT * FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
+	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT "id", "created_at", "created_by", "updated_at", "updated_by", "object" FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
 		trail.ID)
 	if err != nil {
 		return
@@ -148,7 +148,7 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) SafeUpdate(from, to objT) (err 
 		return fmt.Errorf("object with ID '%s' has been modified since it was retrieved", fromTrail.ID)
 	}
 
-	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT * FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
+	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT "id", "created_at", "created_by", "updated_at", "updated_by", "object" FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
 		toTrail.ID)
 	if err != nil {
 		return
