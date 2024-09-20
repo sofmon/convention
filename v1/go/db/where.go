@@ -14,6 +14,7 @@ func Where() whereExpectingFirstStatement {
 }
 
 type whereExpectingFirstStatement interface {
+	Noop() whereExpectingLogicalOperator
 	Key(key string) whereExpectingOperators
 	Search(text string) whereExpectingLogicalOperator
 	CreatedBetween(a, b time.Time) whereExpectingLogicalOperator
@@ -83,6 +84,11 @@ func (w *where) statement() (string, []any, error) {
 		return "", nil, errors.New("where statement is nil")
 	}
 	return w.query.String(), w.params, w.err
+}
+
+func (w *where) Noop() whereExpectingLogicalOperator {
+	_, w.err = w.query.WriteString("1=1")
+	return w
 }
 
 func (w *where) Expression(where whereExpectingLogicalOperator) whereExpectingLogicalOperator {
