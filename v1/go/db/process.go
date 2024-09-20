@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-func (tos TenantObjectSet[objT, idT, shardKeyT]) Process(where *where, process func(obj objT) error, shardKeys ...shardKeyT) (count int, err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) Process(where whereReady, process func(obj objT) error, shardKeys ...shardKeyT) (count int, err error) {
 
 	table, ok := typeToTable[tos.objType]
 	if !ok {
