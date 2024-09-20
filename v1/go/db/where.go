@@ -18,7 +18,7 @@ type whereExpectingFirstStatement interface {
 	Key(key string) whereExpectingOperators
 	Search(text string) whereExpectingLogicalOperator
 	CreatedBetween(a, b time.Time) whereExpectingLogicalOperator
-	CreateBy(user string) whereExpectingLogicalOperator
+	CreatedBy(user string) whereExpectingLogicalOperator
 	UpdatedBetween(a, b time.Time) whereExpectingLogicalOperator
 	UpdatedBy(user string) whereExpectingLogicalOperator
 	Expression(where whereExpectingLogicalOperator) whereExpectingLogicalOperator
@@ -263,7 +263,7 @@ func (w *where) CreatedBetween(a, b time.Time) whereExpectingLogicalOperator {
 	return w
 }
 
-func (w *where) CreateBy(user string) whereExpectingLogicalOperator {
+func (w *where) CreatedBy(user string) whereExpectingLogicalOperator {
 	_, w.err = w.query.WriteString(`"created_by" = $` + strconv.Itoa(len(w.params)+1))
 	w.params = append(w.params, user)
 	return w
