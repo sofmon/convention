@@ -1,6 +1,8 @@
 package example
 
 import (
+	"fmt"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -19,6 +21,8 @@ type User struct {
 
 // The API specification
 type API struct {
+	GetOpenAPI convAPI.OpenAPI `api:"GET /openapi.yaml"`
+
 	GetHealth convAPI.Out[string] `api:"GET /health"`
 
 	PutUser convAPI.InP1[User, UserID]  `api:"PUT /users/{user_id}" description:"Create new user"`
@@ -73,6 +77,10 @@ func Test_server_and_client(t *testing.T) {
 
 	// Create new client based on the same API specification
 	client := convAPI.NewClient[API]("localhost", 12345)
+
+	r, _ := http.Get("https://localhost:12345/openapi.yaml")
+	b, _ := io.ReadAll(r.Body)
+	fmt.Println("res", string(b))
 
 	res, err := client.GetHealth.Call(ctx)
 	if err != nil {

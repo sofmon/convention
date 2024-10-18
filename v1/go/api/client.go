@@ -16,7 +16,8 @@ func NewClient[svcT any](host string, port int) (svc *svcT) {
 		}
 
 		apiTag := f.Tag.Get("api")
-		desc := newDescriptor(host, port, apiTag)
+		in, out := ep.getInOutTypes()
+		desc := newDescriptor(host, port, apiTag, in, out)
 		ep.setDescriptor(desc)
 	}
 

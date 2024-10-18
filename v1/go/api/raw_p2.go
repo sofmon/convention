@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
 
 	convCtx "github.com/sofmon/convention/v1/go/ctx"
 )
@@ -64,6 +65,12 @@ func (x *RawP2[p1T, p2T]) setDescriptor(desc descriptor) {
 func (x *RawP2[p1T, p2T]) getDescriptor() descriptor {
 	return x.descriptor
 }
+
+func (x *RawP2[p1T, p2T]) getInOutTypes() (in, out reflect.Type) {
+	return nil, nil
+}
+
+func (x *RawP2[p1T, p2T]) setEndpoints(eps endpoints) {}
 
 func (x *RawP2[p1T, p2T]) Call(ctx convCtx.Context, p1 p1T, p2 p2T, body io.Reader) (err error) {
 
