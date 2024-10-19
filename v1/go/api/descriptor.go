@@ -62,6 +62,30 @@ type descriptor struct {
 	in, out *object
 }
 
+func (desc *descriptor) path() string {
+	sb := strings.Builder{}
+	for _, segment := range desc.segments {
+		sb.WriteRune('/')
+		if segment.param {
+			sb.WriteRune('{')
+			sb.WriteString(segment.value)
+			sb.WriteRune('}')
+		} else {
+			sb.WriteString(segment.value)
+		}
+	}
+	return sb.String()
+}
+
+func (desc *descriptor) parameters() (params []string) {
+	for _, segment := range desc.segments {
+		if segment.param {
+			params = append(params, segment.value)
+		}
+	}
+	return
+}
+
 type objectType string
 
 func (o objectType) IsSimple() bool {
@@ -96,7 +120,7 @@ type object struct {
 	Fields    map[string]*object `json:"fields"`
 }
 
-func objectFromType(t reflect.Type) (o *object) {
+func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
 
 	if t == nil {
 		return nil
@@ -104,13 +128,21 @@ func objectFromType(t reflect.Type) (o *object) {
 
 	o = &object{}
 
-	o.Mandatory = t.Kind() == reflect.Pointer
+	o.Mandatory = t.Kind() != reflect.Pointer
 
 	if !o.Mandatory {
 		t = t.Elem() // Dereference if it's a pointer
 	}
 
 	o.Name = t.String()
+
+	for _, known := range knownObjects {
+		if known.Name == o.Name {
+			return known
+		}
+	}
+
+	knownObjects = append(knownObjects, o)
 
 	switch t.Kind() {
 
@@ -129,11 +161,11 @@ func objectFromType(t reflect.Type) (o *object) {
 
 	case reflect.Array, reflect.Slice:
 		o.Type = objectTypeArray
-		o.Elem = objectFromType(t.Elem())
+		o.Elem = objectFromType(t.Elem(), knownObjects...)
 
 	case reflect.Map:
 		o.Type = objectTypeMap
-		o.Key, o.Elem = objectFromType(t.Key()), objectFromType(t.Elem())
+		o.Key, o.Elem = objectFromType(t.Key(), knownObjects...), objectFromType(t.Elem(), knownObjects...)
 
 	case reflect.Struct:
 		o.Type = objectTypeObject
@@ -143,7 +175,7 @@ func objectFromType(t reflect.Type) (o *object) {
 			if field.PkgPath != "" {
 				continue // Skip unexported fields
 			}
-			o.Fields[field.Name] = objectFromType(field.Type)
+			o.Fields[field.Name] = objectFromType(field.Type, knownObjects...)
 		}
 
 	case reflect.Invalid, reflect.Uintptr, reflect.Complex64, reflect.Complex128,
