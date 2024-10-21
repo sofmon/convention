@@ -175,7 +175,17 @@ func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
 			if field.PkgPath != "" {
 				continue // Skip unexported fields
 			}
-			o.Fields[field.Name] = objectFromType(field.Type, knownObjects...)
+			jsonTag := field.Tag.Get("json")
+			if jsonTag == "-" {
+				continue // Skip fields with json tag "-"
+			}
+			if jsonTag != "" {
+				jsonTag = strings.Split(jsonTag, ",")[0]
+			}
+			if jsonTag == "" {
+				jsonTag = field.Name
+			}
+			o.Fields[jsonTag] = objectFromType(field.Type, knownObjects...)
 		}
 
 	case reflect.Invalid, reflect.Uintptr, reflect.Complex64, reflect.Complex128,
