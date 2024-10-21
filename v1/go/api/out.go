@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"reflect"
 
 	convCtx "github.com/sofmon/convention/v1/go/ctx"
 )
@@ -76,6 +77,12 @@ func (x *Out[outT]) setDescriptor(desc descriptor) {
 func (x *Out[outT]) getDescriptor() descriptor {
 	return x.descriptor
 }
+
+func (x *Out[outT]) getInOutTypes() (in, out reflect.Type) {
+	return nil, reflect.TypeOf(new(outT))
+}
+
+func (x *Out[outT]) setEndpoints(eps endpoints) {}
 
 func (x *Out[outT]) Call(ctx convCtx.Context) (out outT, err error) {
 

@@ -43,7 +43,8 @@ func computeEndpoints(host string, port int, svc any) (eps endpoints) {
 		}
 
 		apiTag := f.Tag.Get("api")
-		desc := newDescriptor(host, port, apiTag)
+		in, out := ep.getInOutTypes()
+		desc := newDescriptor(host, port, apiTag, in, out)
 		ep.setDescriptor(desc)
 
 		eps = append(eps, ep)
@@ -55,6 +56,10 @@ func computeEndpoints(host string, port int, svc any) (eps endpoints) {
 			return eps[i].getDescriptor().weight > eps[j].getDescriptor().weight
 		},
 	)
+
+	for _, ep := range eps {
+		ep.setEndpoints(eps)
+	}
 
 	return
 }

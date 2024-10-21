@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 )
 
-func newDescriptor(host string, port int, pattern string) (desc descriptor) {
+func newDescriptor(host string, port int, pattern string, in, out reflect.Type) (desc descriptor) {
 
 	var segmentsSplit []string
 
@@ -44,6 +45,8 @@ func newDescriptor(host string, port int, pattern string) (desc descriptor) {
 	desc.weight = weight
 	desc.host = host
 	desc.port = port
+	desc.in = objectFromType(in)
+	desc.out = objectFromType(out)
 
 	return
 }
@@ -55,6 +58,143 @@ type descriptor struct {
 	segments []urlSegment
 	weight   int
 	open     bool
+
+	in, out *object
+}
+
+func (desc *descriptor) path() string {
+	sb := strings.Builder{}
+	for _, segment := range desc.segments {
+		sb.WriteRune('/')
+		if segment.param {
+			sb.WriteRune('{')
+			sb.WriteString(segment.value)
+			sb.WriteRune('}')
+		} else {
+			sb.WriteString(segment.value)
+		}
+	}
+	return sb.String()
+}
+
+func (desc *descriptor) parameters() (params []string) {
+	for _, segment := range desc.segments {
+		if segment.param {
+			params = append(params, segment.value)
+		}
+	}
+	return
+}
+
+type objectType string
+
+func (o objectType) IsSimple() bool {
+	switch o {
+	case objectTypeString,
+		objectTypeInteger,
+		objectTypeNumber,
+		objectTypeBoolean:
+		return true
+	default:
+		return false
+	}
+}
+
+const (
+	objectTypeString  objectType = "string"
+	objectTypeInteger objectType = "integer"
+	objectTypeNumber  objectType = "number"
+	objectTypeBoolean objectType = "boolean"
+	objectTypeArray   objectType = "array"
+	objectTypeMap     objectType = "map"
+	objectTypeObject  objectType = "object"
+	objectTypeInvalid objectType = "invalid"
+)
+
+type object struct {
+	Name      string             `json:"name"`
+	Type      objectType         `json:"type"`
+	Mandatory bool               `json:"mandatory"`
+	Elem      *object            `json:"elem"`
+	Key       *object            `json:"key"`
+	Fields    map[string]*object `json:"fields"`
+}
+
+func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
+
+	if t == nil {
+		return nil
+	}
+
+	o = &object{}
+
+	o.Mandatory = t.Kind() != reflect.Pointer
+
+	if !o.Mandatory {
+		t = t.Elem() // Dereference if it's a pointer
+	}
+
+	o.Name = t.String()
+
+	for _, known := range knownObjects {
+		if known.Name == o.Name {
+			return known
+		}
+	}
+
+	knownObjects = append(knownObjects, o)
+
+	switch t.Kind() {
+
+	case reflect.Bool:
+		o.Type = objectTypeBoolean
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		o.Type = objectTypeInteger
+
+	case reflect.Float32, reflect.Float64:
+		o.Type = objectTypeNumber
+
+	case reflect.String:
+		o.Type = objectTypeString
+
+	case reflect.Array, reflect.Slice:
+		o.Type = objectTypeArray
+		o.Elem = objectFromType(t.Elem(), knownObjects...)
+
+	case reflect.Map:
+		o.Type = objectTypeMap
+		o.Key, o.Elem = objectFromType(t.Key(), knownObjects...), objectFromType(t.Elem(), knownObjects...)
+
+	case reflect.Struct:
+		o.Type = objectTypeObject
+		o.Fields = make(map[string]*object)
+		for i := 0; i < t.NumField(); i++ {
+			field := t.Field(i)
+			if field.PkgPath != "" {
+				continue // Skip unexported fields
+			}
+			jsonTag := field.Tag.Get("json")
+			if jsonTag == "-" {
+				continue // Skip fields with json tag "-"
+			}
+			if jsonTag != "" {
+				jsonTag = strings.Split(jsonTag, ",")[0]
+			}
+			if jsonTag == "" {
+				jsonTag = field.Name
+			}
+			o.Fields[jsonTag] = objectFromType(field.Type, knownObjects...)
+		}
+
+	case reflect.Invalid, reflect.Uintptr, reflect.Complex64, reflect.Complex128,
+		reflect.Chan, reflect.Func, reflect.Interface,
+		reflect.UnsafePointer:
+		o.Type = objectTypeInvalid
+	}
+
+	return
 }
 
 func (desc *descriptor) isSet() bool {

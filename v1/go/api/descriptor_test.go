@@ -25,7 +25,7 @@ func Test_descriptor(t *testing.T) {
 
 	for path, req := range match {
 		t.Run(path, func(t *testing.T) {
-			desc := newDescriptor("localhost", 443, path)
+			desc := newDescriptor("localhost", 443, path, nil, nil)
 
 			if _, m := desc.match(req); !m {
 				t.Errorf("expected match")
@@ -35,7 +35,7 @@ func Test_descriptor(t *testing.T) {
 
 	for path, req := range notMatch {
 		t.Run(path, func(t *testing.T) {
-			desc := newDescriptor("localhost", 443, path)
+			desc := newDescriptor("localhost", 443, path, nil, nil)
 
 			if _, m := desc.match(req); m {
 				t.Errorf("expected not match")
