@@ -12,6 +12,7 @@ import (
 type OpenAPI struct {
 	descriptor descriptor
 	endpoints  endpoints
+	yaml       string
 }
 
 func populateSchemas(res map[string]object, o *object) {
@@ -34,6 +35,8 @@ func populateSchemas(res map[string]object, o *object) {
 }
 
 func snakeName(name string) string {
+	name = strings.Replace(name, "[]", "list_of_", 1)                               // handle array and slice
+	name = strings.ReplaceAll(strings.ReplaceAll(name, "map[", "map_of_"), "]", "") // handle map
 	sb := strings.Builder{}
 	wasCapital := false
 	for i, r := range name {
@@ -60,6 +63,12 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 		return false
 	}
 
+	if x.yaml != "" {
+		w.Header().Set("Content-Type", "application/yaml")
+		w.Write([]byte(x.yaml))
+		return true
+	}
+
 	schemas := make(map[string]object)
 	for _, ep := range x.endpoints {
 		desc := ep.getDescriptor()
@@ -78,19 +87,36 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 	for name, schema := range schemas {
 		sb.WriteString(fmt.Sprintf("    %s:\n", snakeName(name)))
 		sb.WriteString(fmt.Sprintf("      type: %s\n", schema.Type))
-		if schema.Type == "object" {
-			sb.WriteString("      properties:\n")
-			for name, obj := range schema.Fields {
-				sb.WriteString(fmt.Sprintf("        %s:\n", snakeName(name)))
-				if obj.Type.IsSimple() {
-					sb.WriteString(fmt.Sprintf("          type: %s\n", obj.Type))
-				} else {
-					sb.WriteString(fmt.Sprintf("          $ref: '#/components/schemas/%s'\n", snakeName(obj.Name)))
-				}
-				if obj.Mandatory {
-					sb.WriteString("          required: true\n")
-				} else {
-					sb.WriteString("          required: false\n")
+		switch schema.Type {
+		case objectTypeArray:
+			sb.WriteString("      items:\n")
+			if schema.Elem.Type.IsSimple() {
+				sb.WriteString(fmt.Sprintf("        type: %s\n", schema.Elem.Type))
+			} else {
+				sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", snakeName(schema.Elem.Name)))
+			}
+		case objectTypeMap:
+			sb.WriteString("      additionalProperties:\n")
+			if schema.Elem.Type.IsSimple() {
+				sb.WriteString(fmt.Sprintf("        type: %s\n", schema.Elem.Type))
+			} else {
+				sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", snakeName(schema.Elem.Name)))
+			}
+		case objectTypeObject:
+			if len(schema.Fields) > 0 {
+				sb.WriteString("      properties:\n")
+				for name, obj := range schema.Fields {
+					sb.WriteString(fmt.Sprintf("        %s:\n", snakeName(name)))
+					if obj.Type.IsSimple() {
+						sb.WriteString(fmt.Sprintf("          type: %s\n", obj.Type))
+					} else {
+						sb.WriteString(fmt.Sprintf("          $ref: '#/components/schemas/%s'\n", snakeName(obj.Name)))
+					}
+					if obj.Mandatory {
+						sb.WriteString("          nullable: false\n")
+					} else {
+						sb.WriteString("          nullable: true\n")
+					}
 				}
 			}
 		}
@@ -106,14 +132,16 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 	sb.WriteString("paths:\n")
 	for path, eps := range epByPath {
 		sb.WriteString(fmt.Sprintf("  %s:\n", path))
-		sb.WriteString("    parameters:\n")
 		desc := eps[0].getDescriptor()
-		for _, p := range desc.parameters() {
-			sb.WriteString(fmt.Sprintf("      - name: %s\n", p))
-			sb.WriteString("        in: path\n")
-			sb.WriteString("        required: true\n")
-			sb.WriteString("        schema:\n")
-			sb.WriteString("          type: string\n")
+		params := desc.parameters()
+		if len(params) > 0 {
+			sb.WriteString("    parameters:\n")
+			for _, p := range desc.parameters() {
+				sb.WriteString(fmt.Sprintf("      - name: %s\n", p))
+				sb.WriteString("        in: path\n")
+				sb.WriteString("        schema:\n")
+				sb.WriteString("          type: string\n")
+			}
 		}
 		for _, ep := range eps {
 			desc := ep.getDescriptor()
@@ -137,10 +165,10 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 		}
 	}
 
+	x.yaml = sb.String()
+
 	w.Header().Set("Content-Type", "application/yaml")
-
-	w.Write([]byte(sb.String()))
-
+	w.Write([]byte(x.yaml))
 	return true
 }
 

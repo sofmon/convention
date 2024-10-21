@@ -29,6 +29,8 @@ type API struct {
 	GetUser convAPI.OutP1[User, UserID] `api:"GET /users/{user_id}" description:"Get user"`
 
 	PostUserDisable convAPI.InOutP1[User, User, UserID] `api:"POST /users/{user_id}/@block" description:"block user"`
+
+	GetUsers convAPI.Out[[]User] `api:"GET /users/"`
 }
 
 func Test_server_and_client(t *testing.T) {
