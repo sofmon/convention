@@ -1,0 +1,311 @@
+# convention/v2
+
+## 1 Introduction
+
+### 1.1 Purpose and Scope
+
+This document outlines the **convention/v2** standards, targeting containerized environments and supporting multi-tenant, multi-account architectures.
+
+It specifies core concepts, security practices, communication protocols, and data management guidelines required to operate and integrate with other **convention/v2** systems.
+
+## 2 Core Concepts
+
+2.1 Glossary of Terms
+
+- **Agent**: A program with a specific purpose in the system, striving to fulfil its purpose independently of external signals.
+
+- **Tenant**: A unique identifier for a tenant supported by the system. Convention/v2 implements [multitenancy](https://en.wikipedia.org/wiki/Multitenancy) by default.
+
+- **User**: A unique identifier for an authenticated user. Each agent can authenticate as a user using its name as the identifier.
+
+- **Entity**: A unique identifier for a legal entity, with each user possibly having multiple entities. Data is stored by entity to enable a user to access multiple entities (e.g., personal and business financial accounts).
+
+- **Role**: A unique string that defines a user’s specific permissions within the system.
+
+- **Permission**: A unique identifier for allowed actions within the system.
+
+- **Action**: A unique identifier for an operation and resource, mapping to HTTP methods and paths, e.g., `POST /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157`.
+
+- **Workflow**: A unique identifier for the specific workload that is being handled by an **agent**
+
+### 2.2 Agents
+
+Agents are autonomous and automated programs designed for a specific purpose within the system. They function similarly to services in a service-oriented architecture but strive to fulfil their purpose independently of external signals.
+
+Due to their autonomous nature, agents often engage in active communication with other agents to complete tasks as part of their designated purpose.
+
+### 2.3 Multi-tenant
+
+Multitenancy in **convention/v2** allows multiple tenants to share the same infrastructure while maintaining data isolation and security.
+
+Each tenant is identified by a unique identifier, and resources are partitioned to ensure that data and configurations are tenant-specific.
+
+### 2.4 Multi-entity
+
+Multi-entity support in **convention/v2** enables a single user to manage multiple entities, such as personal and business accounts, under one user profile.
+
+Each entity is uniquely identified, and data is stored per entity to ensure proper segregation and access control.
+
+This approach allows users to seamlessly switch between different entities while maintaining data integrity and security.
+
+### 2.4 Access and Action
+
+A **user** in **convention/v2** has the following claims:
+
+- **user**: The authenticated username.
+- **tenants**: List of tenants the authenticated user is assigned to.
+- **entities**: List of entities the authenticated user is assigned to.
+- **roles**: List of roles the authenticated user is assigned to.
+
+In addition to the **user** claims, all **agents** have access to common configuration details about:
+
+- **roles**: All known roles within the system.
+    - **permissions**: All permissions allowed for each **role**.
+        - **action templates**: All action templates allowed for each **permission**.
+
+Access control is achieved by extracting all allowed action templates from the **user**'s **roles** and matching them against the incoming action (HTTP request).
+
+For example, the action template:
+
+``` HTTP
+POST /message/v1/tenants/{tenant}/entities/{entity}/messages/{any}
+```
+
+will match the action:
+
+``` HTTP
+POST /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
+```
+
+only when the authenticated user has access to the corresponding action template (through their **roles**) and has a **tenant** and **entity** in their authorization claims that match the values "default" and "ecf8efa3".
+
+The action template supports the following placeholders:
+
+- `{any}`: Ignore any value in this part of the path.
+- `{any...}`: Ignore any value from this point onward in the path.
+- `{user}`: Identifies the user as part of the path; a check will be performed to ensure the user matches the authenticated user.
+- `{tenant}`: Identifies the tenant as part of the path; a check will be performed to ensure the tenant is allowed for the authenticated user.
+- `{entity}`: Identifies the entity as part of the path; a check will be performed to ensure the entity is allowed for the authenticated user.
+
+## 3 Configuration and Secrets Management
+
+### 3.1 Configuration Overview
+
+**Convention/v2** is designed for containerized environments where secrets are mounted to the container's file system. 
+
+There is no distinction between secrets and configuration values; both must follow best practices for secret management as defined by the hosting environment.
+
+### 3.2 Required Configuration Keys/Files
+
+By default, all configuration files are stored in `/etc/agent`.
+
+The following keys/files must be automatically provided by the hosting environment:
+
+- **environment**: Specifies the environment name, with production as the production environment.
+
+- **communication_certificate**: SSL certificate for internal HTTPS communication.
+
+- **communication_key**: SSL key for internal HTTPS communication.
+
+- **communication_secret**: Secret used for signing and verifying authorization tokens.
+
+- **database**: Configuration details for accessing the system’s database.
+
+## 4: Authentication and Authorization
+
+### 4.1 Authentication with JWT Tokens
+
+**Convention/v2** uses JWT tokens for internal authentication, passed in the Authorization header.
+
+Example:
+
+``` HTTP
+GET /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
+Authorization: Bearer {token}
+```
+
+Tokens are signed with the **communication_secret** in `/etc/agent/communication_secret`.
+
+### 4.2 Required JWT Claims
+
+The JWT tokens must include the following claims:
+
+|Claim|Type|Description|
+|-|-|-|
+|**agent**|string|Agent name|
+|**user**|string|Authenticated user|
+|**tenants**|array of strings|User’s tenants|
+|**entities**|array of strings|Entities accessible by the user|
+|**roles**|array of strings|User’s assigned roles|
+
+## 5 Communication Protocol
+
+All communication uses the HTTP protocol with a JSON-formatted body.
+
+### 5.1 Secure Communication
+
+All communication is secured with SSL (HTTPS), using the **communication_certificate** and **communication_key** located at `/etc/agent`.
+
+The **communication_certificate** must be trusted by the hosting OS.
+
+### 5.2 Actions and Resources
+
+Each **action** includes an operation and a resource, corresponding to HTTP methods and paths. The **agent** name and version always appear as the first segments of a resource identifier.
+
+In the example below, the **agent** name is "message-v1":
+``` HTTP
+POST /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
+```
+
+### 5.3 Error Handling
+
+Errors are communicated in JSON format with code and message fields:
+
+``` JSON
+{
+    "code": "...",
+    "message": "..."
+}
+```
+
+### 5.4 Workflow and Agent
+
+Every task engaged by an **agent** must have a **workflow** identifier. If the task is initiated by an incoming HTTP request, the **agent** should use the **workflow** identifier from the `Workflow` HTTP header.
+
+If no **workflow** identifier is available, the **agent** must generate a new unique **workflow** identifier and pass it along.
+
+`Workflow` headers should be included in all outgoing HTTP requests as well as the `Agent` header containing the **agent** name.
+
+Example:
+``` HTTP
+GET /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
+Authorization: Bearer {token}
+Workflow: {workflow identifier}
+Agent: {agent name}
+```
+
+### 5.5 Time Management (Test Environments Only)
+
+In non-production environments, agents can use the `Time-Now` header from the incoming HTTP request to simulate different times. The format follows RFC3339 (e.g., 2006-01-02T15:04:05Z07:00).
+
+The `Time-Now` header must be ignored in production environments.
+
+Example:
+``` HTTP
+GET /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
+Authorization: Bearer {token}
+Workflow: {workflow identifier}
+Agent: {agent name}
+Time-Now: 2024-01-02T15:04:05Z07:00
+```
+
+## 6 Data Storage and Sharding
+
+### 6.1 Versioning
+
+Database versioning in **convention/v2** enables seamless database migrations by allowing access to different databases, schemas, or database servers based on specified versions.
+
+This approach facilitates schema updates or database engine changes as part of the **agent**'s operations.
+
+### 6.2 Multitenancy
+
+The multi-tenancy described in chapter "2.3 Multi-tenant" is directly implemented in the database. Each **tenant** has its own database connection, ensuring data isolation and security.
+
+### 6.3 Sharding
+
+Database sharding in **convention/v2** allows data to be distributed across multiple databases, schemas, or servers. This approach enhances performance and scalability by balancing the data load, ensuring that no single database becomes a bottleneck.
+
+Each shard contains a subset of the data, and the **convention/v2** implementation should intelligently routes queries to the appropriate shard based on the data's partitioning logic. Each **tenant** can have one default database and/or multiple shards.
+
+Changing the number of shards requires a full data migration, which can be achieved through the database versioning mechanism. This allows each **agent** to migrate its own data as part of their operations.
+
+### 6.5 Configuration
+
+Database configurations are located in the **database** key in `/etc/agent/database`, specifying version, tenants, and shards.
+
+``` JSON
+{
+    "versions": {
+        "v1": {
+            "engine": "postgres",
+            "tenants": {
+                "default": {
+                    "default": {
+                        "host":"127.0.0.1",
+                        "port":0,
+                        "database":"messages_default",
+                        "username":"some_user",
+                        "password":"some_password"
+                    },
+                    "shards": [
+                        {
+                            "host":"127.0.0.1",
+                            "port":0,
+                            "database":"messages_shard1",
+                            "username":"some_user",
+                            "password":"some_password"
+                        },
+                        {
+                            "host":"127.0.0.1",
+                            "port":0,
+                            "database":"messages_shard2",
+                            "username":"some_user",
+                            "password":"some_password"
+                        }
+                    ]
+                }
+            }
+        }
+    }
+}
+```
+
+The convention supports versioning, allowing transition from one schema to another and sharding, enabling data distribution across schemas/databases and servers.
+
+## 7 Logging and Monitoring
+
+### 7.1 Logging Structure
+
+Logs in **convention/v2** are collected from `stdout` in JSON format, each entry ending with a newline (`\n`).
+
+### 7.2 Log Format Example
+
+There are four log levels for messages: "error", "warning", "info", and "debug". 
+
+Logs are formatted as follows:
+
+``` JSON
+{
+    "time": "2023-10-01T01:00:00Z",
+    "level": "error",
+    "agent": "message-v1",
+    "user": "josh",
+    "action": "GET messages/v1/users/josh/messages",
+    "workflow": "a9ca2c1a-f993-420d-b851-726dafc35102",
+    "scope": "messages-v1 > svc.ListenAndServe > svc.handleGetMessages",
+    "message": "✘ unable to connect to database"
+}
+```
+
+### 7.3 HTTP Trace
+
+An additional log level, "trace," is used to log incoming and outgoing HTTP calls. 
+
+The format is as follows:
+
+``` JSON
+{
+    "time": "2023-10-01T01:00:00Z",
+    "level": "trace",
+    "agent": "message-v1",
+    "user": "josh",
+    "action": "GET messages/v1/users/josh/messages",
+    "workflow": "a9ca2c1a-f993-420d-b851-726dafc35102",
+    "request": "GET /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157\\nAuthorization: Bearer ...\\nWorkflow: 005dba5e\\nAgent: profile-v1...",
+    "response": "HTTP/1.1 200 OK\\nDate: Mon, 27 Jul 2009 12:28:53 GMT\\nWorkflow: 005dba5e\\nAgent: message-v1..."
+}
+```
+
+The `Authorization` header must be obfuscated in the trace message request and response.
+
+Only HTTP headers are logged for HTTP requests and responses with binary payloads.
