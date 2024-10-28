@@ -1,16 +1,12 @@
 # convention/v2
 
-## 1 Introduction
+## 1 Purpose and Scope
 
-### 1.1 Purpose and Scope
-
-This document outlines the **convention/v2** standards, targeting containerized environments and supporting multi-tenant, multi-account architectures.
+This document outlines the **convention/v2** standards, targeting containerized environments and supporting multi-tenant, multi-entity architectures.
 
 It specifies core concepts, security practices, communication protocols, and data management guidelines required to operate and integrate with other **convention/v2** systems.
 
-## 2 Core Concepts
-
-2.1 Glossary of Terms
+## 2 Glossary
 
 - **Agent**: A program with a specific purpose in the system, striving to fulfil its purpose independently of external signals.
 
@@ -27,65 +23,6 @@ It specifies core concepts, security practices, communication protocols, and dat
 - **Action**: A unique identifier for an operation and resource, mapping to HTTP methods and paths, e.g., `POST /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157`.
 
 - **Workflow**: A unique identifier for the specific workload that is being handled by an **agent**
-
-### 2.2 Agents
-
-Agents are autonomous and automated programs designed for a specific purpose within the system. They function similarly to services in a service-oriented architecture but strive to fulfil their purpose independently of external signals.
-
-Due to their autonomous nature, agents often engage in active communication with other agents to complete tasks as part of their designated purpose.
-
-### 2.3 Multi-tenant
-
-Multitenancy in **convention/v2** allows multiple tenants to share the same infrastructure while maintaining data isolation and security.
-
-Each tenant is identified by a unique identifier, and resources are partitioned to ensure that data and configurations are tenant-specific.
-
-### 2.4 Multi-entity
-
-Multi-entity support in **convention/v2** enables a single user to manage multiple entities, such as personal and business accounts, under one user profile.
-
-Each entity is uniquely identified, and data is stored per entity to ensure proper segregation and access control.
-
-This approach allows users to seamlessly switch between different entities while maintaining data integrity and security.
-
-### 2.4 Access and Action
-
-A **user** in **convention/v2** has the following claims:
-
-- **user**: The authenticated username.
-- **tenants**: List of tenants the authenticated user is assigned to.
-- **entities**: List of entities the authenticated user is assigned to.
-- **roles**: List of roles the authenticated user is assigned to.
-
-In addition to the **user** claims, all **agents** have access to common configuration details about:
-
-- **roles**: All known roles within the system.
-    - **permissions**: All permissions allowed for each **role**.
-        - **action templates**: All action templates allowed for each **permission**.
-
-Access control is achieved by extracting all allowed action templates from the **user**'s **roles** and matching them against the incoming action (HTTP request).
-
-For example, the action template:
-
-``` HTTP
-POST /message/v1/tenants/{tenant}/entities/{entity}/messages/{any}
-```
-
-will match the action:
-
-``` HTTP
-POST /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
-```
-
-only when the authenticated user has access to the corresponding action template (through their **roles**) and has a **tenant** and **entity** in their authorization claims that match the values "default" and "ecf8efa3".
-
-The action template supports the following placeholders:
-
-- `{any}`: Ignore any value in this part of the path.
-- `{any...}`: Ignore any value from this point onward in the path.
-- `{user}`: Identifies the user as part of the path; a check will be performed to ensure the user matches the authenticated user.
-- `{tenant}`: Identifies the tenant as part of the path; a check will be performed to ensure the tenant is allowed for the authenticated user.
-- `{entity}`: Identifies the entity as part of the path; a check will be performed to ensure the entity is allowed for the authenticated user.
 
 ## 3 Configuration and Secrets Management
 
@@ -138,6 +75,38 @@ The JWT tokens must include the following claims:
 |**entities**|array of strings|Entities accessible by the user|
 |**roles**|array of strings|User’s assigned roles|
 
+### 4.3 Access and Action
+
+In addition to the **user** claims, all **agents** have access to common configuration details about:
+
+- **roles**: All known roles within the system.
+    - **permissions**: All permissions allowed for each **role**.
+        - **action templates**: All action templates allowed for each **permission**.
+
+Access control is achieved by extracting all allowed action templates from the **user**'s **roles** and matching them against the incoming action (HTTP request).
+
+For example, the action template:
+
+``` HTTP
+POST /message/v1/tenants/{tenant}/entities/{entity}/messages/{any}
+```
+
+will match the action:
+
+``` HTTP
+POST /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
+```
+
+only when the authenticated user has access to the corresponding action template (through their **roles**) and has a **tenant** and **entity** in their authorization claims that match the values "default" and "ecf8efa3".
+
+The action template supports the following placeholders:
+
+- `{any}`: Ignore any value in this part of the path.
+- `{any...}`: Ignore any value from this point onward in the path.
+- `{user}`: Identifies the user as part of the path; a check will be performed to ensure the user matches the authenticated user.
+- `{tenant}`: Identifies the tenant as part of the path; a check will be performed to ensure the tenant is allowed for the authenticated user.
+- `{entity}`: Identifies the entity as part of the path; a check will be performed to ensure the entity is allowed for the authenticated user.
+
 ## 5 Communication Protocol
 
 All communication uses the HTTP protocol with a JSON-formatted body.
@@ -146,7 +115,7 @@ All communication uses the HTTP protocol with a JSON-formatted body.
 
 All communication is secured with SSL (HTTPS), using the **communication_certificate** and **communication_key** located at `/etc/agent`.
 
-The **communication_certificate** must be trusted by the hosting OS.
+The **communication_certificate** must be trusted by the container hosting OS.
 
 ### 5.2 Actions and Resources
 
@@ -268,7 +237,7 @@ The convention supports versioning, allowing transition from one schema to anoth
 
 Logs in **convention/v2** are collected from `stdout` in JSON format, each entry ending with a newline (`\n`).
 
-### 7.2 Log Format Example
+### 7.2 Log Messages
 
 There are four log levels for messages: "error", "warning", "info", and "debug". 
 
