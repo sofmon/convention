@@ -9,19 +9,12 @@ It specifies core concepts, security practices, communication protocols, and dat
 ## 2 Glossary
 
 - **Agent**: A program with a specific purpose in the system, striving to fulfil its purpose independently of external signals.
-
 - **Tenant**: A unique identifier for a tenant supported by the system. Convention/v2 implements [multitenancy](https://en.wikipedia.org/wiki/Multitenancy) by default.
-
 - **User**: A unique identifier for an authenticated user. Each agent can authenticate as a user using its name as the identifier.
-
 - **Entity**: A unique identifier for a legal entity, with each user possibly having multiple entities. Data is stored by entity to enable a user to access multiple entities (e.g., personal and business financial accounts).
-
 - **Role**: A unique string that defines a user’s specific permissions within the system.
-
 - **Permission**: A unique identifier for allowed actions within the system.
-
 - **Action**: A unique identifier for an operation and resource, mapping to HTTP methods and paths, e.g., `POST /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157`.
-
 - **Workflow**: A unique identifier for the specific workload that is being handled by an **agent**
 
 ## 3 Configuration and Secrets Management
@@ -39,18 +32,76 @@ By default, all configuration files are stored in `/etc/agent`.
 The following keys/files must be automatically provided by the hosting environment:
 
 - **environment**: Specifies the environment name, with production as the production environment.
-
 - **communication_certificate**: SSL certificate for internal HTTPS communication.
-
 - **communication_key**: SSL key for internal HTTPS communication.
-
 - **communication_secret**: Secret used for signing and verifying authorization tokens.
-
 - **database**: Configuration details for accessing the system’s database.
 
-## 4: Authentication and Authorization
+## 4 Communication Protocol
 
-### 4.1 Authentication with JWT Tokens
+All communication uses the HTTP protocol with a JSON-formatted body.
+
+### 4.1 Secure Communication
+
+All communication is secured with SSL (HTTPS), using the **communication_certificate** and **communication_key** located at `/etc/agent`.
+
+The **communication_certificate** must be trusted by the container hosting OS.
+
+### 4.2 Actions and Resources
+
+Each **action** includes an operation and a resource, corresponding to HTTP methods and paths. The **agent** name and version always appear as the first segments of a resource identifier.
+
+In the example below, the **agent** name is "message-v1":
+``` HTTP
+POST /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
+```
+
+### 4.3 Error Handling
+
+Errors are communicated in JSON format with code and message fields:
+
+``` JSON
+{
+    "code": "...",
+    "message": "..."
+}
+```
+
+### 4.4 Workflow and Agent
+
+Every task engaged by an **agent** must have a **workflow** identifier. If the task is initiated by an incoming HTTP request, the **agent** should use the **workflow** identifier from the `Workflow` HTTP header.
+
+If no **workflow** identifier is available, the **agent** must generate a new unique **workflow** identifier and pass it along.
+
+`Workflow` headers should be included in all outgoing HTTP requests as well as the `Agent` header containing the **agent** name.
+
+Example:
+``` HTTP
+GET /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
+Authorization: Bearer {token}
+Workflow: {workflow identifier}
+Agent: {agent name}
+```
+
+### 4.5 Time Management (Test Environments Only)
+
+In non-production environments, agents can use the `Time-Now` header from the incoming HTTP request to simulate different times. The format follows RFC3339 (e.g., 2006-01-02T15:04:05Z07:00).
+
+The `Time-Now` header must be ignored in production environments.
+
+Example:
+``` HTTP
+GET /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
+Authorization: Bearer {token}
+Workflow: {workflow identifier}
+Agent: {agent name}
+Time-Now: 2024-01-02T15:04:05Z07:00
+```
+
+
+## 5: Authentication and Authorization
+
+### 5.1 Authentication with JWT Tokens
 
 **Convention/v2** uses JWT tokens for internal authentication, passed in the Authorization header.
 
@@ -63,7 +114,7 @@ Authorization: Bearer {token}
 
 Tokens are signed with the **communication_secret** in `/etc/agent/communication_secret`.
 
-### 4.2 Required JWT Claims
+### 5.2 Required JWT Claims
 
 The JWT tokens must include the following claims:
 
@@ -75,7 +126,7 @@ The JWT tokens must include the following claims:
 |**entities**|array of strings|Entities accessible by the user|
 |**roles**|array of strings|User’s assigned roles|
 
-### 4.3 Access and Action
+### 5.3 Access and Action
 
 In addition to the **user** claims, all **agents** have access to common configuration details about:
 
@@ -107,66 +158,6 @@ The action template supports the following placeholders:
 - `{tenant}`: Identifies the tenant as part of the path; a check will be performed to ensure the tenant is allowed for the authenticated user.
 - `{entity}`: Identifies the entity as part of the path; a check will be performed to ensure the entity is allowed for the authenticated user.
 
-## 5 Communication Protocol
-
-All communication uses the HTTP protocol with a JSON-formatted body.
-
-### 5.1 Secure Communication
-
-All communication is secured with SSL (HTTPS), using the **communication_certificate** and **communication_key** located at `/etc/agent`.
-
-The **communication_certificate** must be trusted by the container hosting OS.
-
-### 5.2 Actions and Resources
-
-Each **action** includes an operation and a resource, corresponding to HTTP methods and paths. The **agent** name and version always appear as the first segments of a resource identifier.
-
-In the example below, the **agent** name is "message-v1":
-``` HTTP
-POST /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
-```
-
-### 5.3 Error Handling
-
-Errors are communicated in JSON format with code and message fields:
-
-``` JSON
-{
-    "code": "...",
-    "message": "..."
-}
-```
-
-### 5.4 Workflow and Agent
-
-Every task engaged by an **agent** must have a **workflow** identifier. If the task is initiated by an incoming HTTP request, the **agent** should use the **workflow** identifier from the `Workflow` HTTP header.
-
-If no **workflow** identifier is available, the **agent** must generate a new unique **workflow** identifier and pass it along.
-
-`Workflow` headers should be included in all outgoing HTTP requests as well as the `Agent` header containing the **agent** name.
-
-Example:
-``` HTTP
-GET /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
-Authorization: Bearer {token}
-Workflow: {workflow identifier}
-Agent: {agent name}
-```
-
-### 5.5 Time Management (Test Environments Only)
-
-In non-production environments, agents can use the `Time-Now` header from the incoming HTTP request to simulate different times. The format follows RFC3339 (e.g., 2006-01-02T15:04:05Z07:00).
-
-The `Time-Now` header must be ignored in production environments.
-
-Example:
-``` HTTP
-GET /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
-Authorization: Bearer {token}
-Workflow: {workflow identifier}
-Agent: {agent name}
-Time-Now: 2024-01-02T15:04:05Z07:00
-```
 
 ## 6 Data Storage and Sharding
 
@@ -190,7 +181,7 @@ Changing the number of shards requires a full data migration, which can be achie
 
 ### 6.5 Configuration
 
-Database configurations are located in the **database** key in `/etc/agent/database`, specifying version, tenants, and shards.
+Database configurations are located in the **database** key in `/etc/agent/database`, specifying database connection per version, tenants, and shards.
 
 ``` JSON
 {
@@ -228,8 +219,6 @@ Database configurations are located in the **database** key in `/etc/agent/datab
     }
 }
 ```
-
-The convention supports versioning, allowing transition from one schema to another and sharding, enabling data distribution across schemas/databases and servers.
 
 ## 7 Logging and Monitoring
 
