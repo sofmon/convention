@@ -1,12 +1,12 @@
 # convention/v2
 
-## 1 Purpose and Scope
+## Purpose and Scope
 
 This document outlines the **convention/v2** standards, targeting containerized environments and supporting multi-tenant, multi-entity architectures.
 
 It specifies core concepts, security practices, communication protocols, and data management guidelines required to operate and integrate with other **convention/v2** systems.
 
-## 2 Glossary
+## Glossary
 
 - **Agent**: A program with a specific purpose in the system, striving to fulfil its purpose independently of external signals.
 - **Tenant**: A unique identifier for a tenant supported by the system. Convention/v2 implements [multitenancy](https://en.wikipedia.org/wiki/Multitenancy) by default.
@@ -17,15 +17,15 @@ It specifies core concepts, security practices, communication protocols, and dat
 - **Action**: A unique identifier for an operation and resource, mapping to HTTP methods and paths, e.g., `POST /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157`.
 - **Workflow**: A unique identifier for the specific workload that is being handled by an **agent**
 
-## 3 Configuration and Secrets Management
+## Configuration and Secrets Management
 
-### 3.1 Configuration Overview
+### Configuration Overview
 
 **Convention/v2** is designed for containerized environments where secrets are mounted to the container's file system. 
 
 There is no distinction between secrets and configuration values; both must follow best practices for secret management as defined by the hosting environment.
 
-### 3.2 Required Configuration Keys/Files
+### Configuration Keys/Files
 
 By default, all configuration files are stored in `/etc/agent`.
 
@@ -37,17 +37,17 @@ The following keys/files must be automatically provided by the hosting environme
 - **communication_secret**: Secret used for signing and verifying authorization tokens.
 - **database**: Configuration details for accessing the system’s database.
 
-## 4 Communication Protocol
+## Communication Protocol
 
 All communication uses the HTTP protocol with a JSON-formatted body.
 
-### 4.1 Secure Communication
+### Secure Communication
 
 All communication is secured with SSL (HTTPS), using the **communication_certificate** and **communication_key** located at `/etc/agent`.
 
 The **communication_certificate** must be trusted by the container hosting OS.
 
-### 4.2 Actions and Resources
+### Actions and Resources
 
 Each **action** includes an operation and a resource, corresponding to HTTP methods and paths. The **agent** name and version always appear as the first segments of a resource identifier.
 
@@ -56,7 +56,7 @@ In the example below, the **agent** name is "message-v1":
 POST /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
 ```
 
-### 4.3 Error Handling
+### Error Handling
 
 Errors are communicated in JSON format with code and message fields:
 
@@ -67,7 +67,7 @@ Errors are communicated in JSON format with code and message fields:
 }
 ```
 
-### 4.4 Workflow and Agent
+### Workflow and Agent
 
 Every task engaged by an **agent** must have a **workflow** identifier. If the task is initiated by an incoming HTTP request, the **agent** should use the **workflow** identifier from the `Workflow` HTTP header.
 
@@ -83,7 +83,7 @@ Workflow: {workflow identifier}
 Agent: {agent name}
 ```
 
-### 4.5 Time Management (Test Environments Only)
+### Time Management (Test Environments Only)
 
 In non-production environments, agents can use the `Time-Now` header from the incoming HTTP request to simulate different times. The format follows RFC3339 (e.g., 2006-01-02T15:04:05Z07:00).
 
@@ -99,9 +99,9 @@ Time-Now: 2024-01-02T15:04:05Z07:00
 ```
 
 
-## 5: Authentication and Authorization
+## Authentication and Authorization
 
-### 5.1 Authentication with JWT Tokens
+### Authentication with JWT Tokens
 
 **Convention/v2** uses JWT tokens for internal authentication, passed in the Authorization header.
 
@@ -114,7 +114,7 @@ Authorization: Bearer {token}
 
 Tokens are signed with the **communication_secret** in `/etc/agent/communication_secret`.
 
-### 5.2 Required JWT Claims
+### Required JWT Claims
 
 The JWT tokens must include the following claims:
 
@@ -126,7 +126,7 @@ The JWT tokens must include the following claims:
 |**entities**|array of strings|Entities accessible by the user|
 |**roles**|array of strings|User’s assigned roles|
 
-### 5.3 Access and Action
+### Access and Action
 
 In addition to the **user** claims, all **agents** have access to common configuration details about:
 
@@ -159,19 +159,19 @@ The action template supports the following placeholders:
 - `{entity}`: Identifies the entity as part of the path; a check will be performed to ensure the entity is allowed for the authenticated user.
 
 
-## 6 Data Storage and Sharding
+## Data Storage and Sharding
 
-### 6.1 Versioning
+### Versioning
 
 Database versioning in **convention/v2** enables seamless database migrations by allowing access to different databases, schemas, or database servers based on specified versions.
 
 This approach facilitates schema updates or database engine changes as part of the **agent**'s operations.
 
-### 6.2 Multitenancy
+### Multitenancy
 
 The multi-tenancy described in chapter "2.3 Multi-tenant" is directly implemented in the database. Each **tenant** has its own database connection, ensuring data isolation and security.
 
-### 6.3 Sharding
+### Sharding
 
 Database sharding in **convention/v2** allows data to be distributed across multiple databases, schemas, or servers. This approach enhances performance and scalability by balancing the data load, ensuring that no single database becomes a bottleneck.
 
@@ -179,7 +179,7 @@ Each shard contains a subset of the data, and the **convention/v2** implementati
 
 Changing the number of shards requires a full data migration, which can be achieved through the database versioning mechanism. This allows each **agent** to migrate its own data as part of their operations.
 
-### 6.5 Configuration
+### Configuration
 
 Database configurations are located in the **database** key in `/etc/agent/database`, specifying database connection per version, tenants, and shards.
 
@@ -220,13 +220,13 @@ Database configurations are located in the **database** key in `/etc/agent/datab
 }
 ```
 
-## 7 Logging and Monitoring
+## Logging and Monitoring
 
-### 7.1 Logging Structure
+### Logging Structure
 
 Logs in **convention/v2** are collected from `stdout` in JSON format, each entry ending with a newline (`\n`).
 
-### 7.2 Log Messages
+### Log Messages
 
 There are four log levels for messages: "error", "warning", "info", and "debug". 
 
@@ -245,7 +245,7 @@ Logs are formatted as follows:
 }
 ```
 
-### 7.3 HTTP Trace
+### HTTP Trace
 
 An additional log level, "trace," is used to log incoming and outgoing HTTP calls. 
 
