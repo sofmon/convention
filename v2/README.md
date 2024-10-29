@@ -14,7 +14,7 @@ It specifies core concepts, security practices, communication protocols, and dat
 - **Entity**: A unique identifier for a legal entity, with each user possibly having multiple entities. Data is stored by entity to enable a user to access multiple entities (e.g., personal and business financial accounts).
 - **Role**: A unique string that defines a user’s specific permissions within the system.
 - **Permission**: A unique identifier for allowed actions within the system.
-- **Action**: A unique identifier for an operation and resource, mapping to HTTP methods and paths, e.g., `POST /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157`.
+- **Action**: A unique identifier for an operation and resource, mapping to HTTP methods and paths, e.g., `GET /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157`.
 - **Workflow**: A unique identifier for the specific workload that is being handled by an **agent**
 
 ## Configuration and Secrets Management
@@ -31,7 +31,7 @@ By default, all configuration files are stored in `/etc/agent`.
 
 The following keys/files must be automatically provided by the hosting environment:
 
-- **environment**: Specifies the environment name, with production as the production environment.
+- **environment**: Specifies the environment name, with "production" as the production environment.
 - **communication_certificate**: SSL certificate for internal HTTPS communication.
 - **communication_key**: SSL key for internal HTTPS communication.
 - **communication_secret**: Secret used for signing and verifying authorization tokens.
@@ -53,7 +53,7 @@ Each **action** includes an operation and a resource, corresponding to HTTP meth
 
 In the example below, the **agent** name is "message-v1":
 ``` HTTP
-POST /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
+GET /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
 ```
 
 ### Error Handling
@@ -78,26 +78,23 @@ If no **workflow** identifier is available, the **agent** must generate a new un
 Example:
 ``` HTTP
 GET /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
-Authorization: Bearer {token}
 Workflow: {workflow identifier}
 Agent: {agent name}
 ```
 
 ### Time Management (Test Environments Only)
 
-In non-production environments, agents can use the `Time-Now` header from the incoming HTTP request to simulate different times. The format follows RFC3339 (e.g., 2006-01-02T15:04:05Z07:00).
+In non-production environments, **agents** must adhere to the `Time-Now` header from the incoming HTTP request to simulate different times. The format follows RFC3339 (e.g., 2006-01-02T15:04:05Z07:00).
 
 The `Time-Now` header must be ignored in production environments.
 
 Example:
 ``` HTTP
 GET /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
-Authorization: Bearer {token}
 Workflow: {workflow identifier}
 Agent: {agent name}
 Time-Now: 2024-01-02T15:04:05Z07:00
 ```
-
 
 ## Authentication and Authorization
 
@@ -109,6 +106,8 @@ Example:
 
 ``` HTTP
 GET /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
+Workflow: {workflow identifier}
+Agent: {agent name}
 Authorization: Bearer {token}
 ```
 
@@ -134,21 +133,52 @@ In addition to the **user** claims, all **agents** have access to common configu
     - **permissions**: All permissions allowed for each **role**.
         - **action templates**: All action templates allowed for each **permission**.
 
+In JSON format a simple configuration can look like:
+
+``` JSON
+{
+    "roles": {
+        "user": [
+            "can_send_tenant_messages",
+            "can_read_own_messages"
+        ],
+        "admin": [
+            "can_send_tenant_messages",
+            "can_read_tenant_messages"
+        ]
+    },
+    "permissions": {
+        "can_send_tenant_messages": [
+            "PUT /message/v1/tenants/{tenant}/entities/{any}/messages/{any}"
+        ],
+        "can_read_tenant_messages": [
+            "GET /message/v1/tenants/{tenant}/entities/{any}/messages/{any}"
+        ],
+        "can_read_own_messages": [
+            "GET /message/v1/tenants/{tenant}/entities/{entity}/messages/{any}"
+        ]
+    },
+    "public": {
+        "GET /message/v1/openapi.yaml"
+    }
+}
+```
+
 Access control is achieved by extracting all allowed action templates from the **user**'s **roles** and matching them against the incoming action (HTTP request).
 
 For example, the action template:
 
 ``` HTTP
-POST /message/v1/tenants/{tenant}/entities/{entity}/messages/{any}
+GET /message/v1/tenants/{tenant}/entities/{entity}/messages/{any}
 ```
 
 will match the action:
 
 ``` HTTP
-POST /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
+GET /message/v1/tenants/default/entities/ecf8efa3/messages/f38ce157
 ```
 
-only when the authenticated user has access to the corresponding action template (through their **roles**) and has a **tenant** and **entity** in their authorization claims that match the values "default" and "ecf8efa3".
+only when the authenticated user has access to the corresponding action template (through "user " **role**) and has a **tenant** and **entity** in their authorization claims that match the values "default" and "ecf8efa3".
 
 The action template supports the following placeholders:
 
