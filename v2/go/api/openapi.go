@@ -41,8 +41,10 @@ func snakeName(name string) string {
 	wasCapital := false
 	for i, r := range name {
 		isCapital := 'A' <= r && r <= 'Z'
-		isLetter := 'a' <= r && r <= 'z' || r == '_' || isCapital
-		if !isLetter {
+		isNumber := '0' <= r && r <= '9'
+		isLetter := ('a' <= r && r <= 'z') || r == '_' || isCapital
+		isAllowed := isNumber || isLetter
+		if !isAllowed {
 			continue
 		}
 		if i == 0 {
@@ -138,6 +140,7 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 			sb.WriteString("    parameters:\n")
 			for _, p := range desc.parameters() {
 				sb.WriteString(fmt.Sprintf("      - name: %s\n", p))
+				sb.WriteString("        required: true\n")
 				sb.WriteString("        in: path\n")
 				sb.WriteString("        schema:\n")
 				sb.WriteString("          type: string\n")
@@ -166,6 +169,8 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 	}
 
 	x.yaml = sb.String()
+
+	fmt.Println(x.yaml)
 
 	w.Header().Set("Content-Type", "application/yaml")
 	w.Write([]byte(x.yaml))

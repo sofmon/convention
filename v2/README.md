@@ -191,11 +191,11 @@ The action template supports the following placeholders:
 
 ## Data Storage and Sharding
 
-### Versioning
+### Vaults
 
-Database versioning in **convention/v2** enables seamless database migrations by allowing access to different databases, schemas, or database servers based on specified versions.
+Fist segmentation of database in **convention/v2** is called vault. Through different vault names, **convention/v2** enables access to different databases, schemas, or database servers.
 
-This approach facilitates schema updates or database engine changes as part of the **agent**'s operations.
+This approach is also useful to facilitates schema updates or database engine changes as part of the **agent**'s operations.
 
 ### Multitenancy
 
@@ -205,47 +205,41 @@ The multi-tenancy is directly implemented in the database. Each **tenant** has i
 
 Database sharding in **convention/v2** allows data to be distributed across multiple databases, schemas, or servers. This approach enhances performance and scalability by balancing the data load, ensuring that no single database becomes a bottleneck.
 
-Each shard contains a subset of the data, and the **convention/v2** implementation should intelligently routes queries to the appropriate shard based on the data's partitioning logic. Each **tenant** can have one default database and/or multiple shards.
+Each shard contains a subset of the data, and the **convention/v2** implementation should intelligently routes queries to the appropriate shard based on the data's partitioning logic. Each **tenant** can have one or multiple shards.
 
-Changing the number of shards requires a full data migration, which can be achieved through the database versioning mechanism. This allows each **agent** to migrate its own data as part of their operations.
+Changing the number of shards requires a full data migration, which can be achieved through the multi vault mechanism. This allows each **agent** to migrate its own data as part of their operations.
 
 ### Configuration
 
-Database configurations are located in the **database** key in `/etc/agent/database`, specifying database connection per version, tenants, and shards.
+Database configurations are located in the **database** key in `/etc/agent/database`, specifying database connection per vault, tenants, and shards.
 
 ``` JSON
 {
-    "versions": {
-        "v1": {
-            "engine": "postgres",
-            "tenants": {
-                "default": {
-                    "default": {
-                        "host":"127.0.0.1",
-                        "port":0,
-                        "database":"messages_default",
-                        "username":"some_user",
-                        "password":"some_password"
-                    },
-                    "shards": [
-                        {
-                            "host":"127.0.0.1",
-                            "port":0,
-                            "database":"messages_shard1",
-                            "username":"some_user",
-                            "password":"some_password"
-                        },
-                        {
-                            "host":"127.0.0.1",
-                            "port":0,
-                            "database":"messages_shard2",
-                            "username":"some_user",
-                            "password":"some_password"
-                        }
-                    ]
-                }
+    "cache": {
+        "tenant1": [
+            {
+                "engine": "sqlite",
+                "in_memory": true,
             }
-        }
+        ]
+    },
+    "messages": {
+        "tenant1": [
+            {
+                "host":"127.0.0.1",
+                "port":0,
+                "database":"t1_messages_shard1",
+                "username":"some_user",
+                "password":"some_password"
+            },
+            {
+                "host":"127.0.0.1",
+                "port":0,
+                "database":"t1_messages_shard2",
+                "username":"some_user",
+                "password":"some_password"
+            }
+        ]
     }
 }
 ```
