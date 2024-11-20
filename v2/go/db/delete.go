@@ -9,8 +9,8 @@ import (
 
 func (tos TenantObjectSet[objT, idT, shardKeyT]) Delete(ctx convCtx.Context, id idT, shardKeys ...shardKeyT) (err error) {
 
-	if !tos.isInitialized() {
-		err = ErrObjectTypeNotRegistered
+	err = tos.prepare()
+	if err != nil {
 		return
 	}
 

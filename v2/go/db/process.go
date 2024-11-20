@@ -10,8 +10,8 @@ import (
 
 func (tos TenantObjectSet[objT, idT, shardKeyT]) Process(ctx convCtx.Context, where whereReady, process func(ctx convCtx.Context, obj objT) error, shardKeys ...shardKeyT) (count int, err error) {
 
-	if !tos.isInitialized() {
-		err = ErrObjectTypeNotRegistered
+	err = tos.prepare()
+	if err != nil {
 		return
 	}
 

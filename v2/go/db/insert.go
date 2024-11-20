@@ -9,8 +9,8 @@ import (
 
 func (tos TenantObjectSet[objT, idT, shardKeyT]) Insert(ctx convCtx.Context, obj objT) (err error) {
 
-	if !tos.isInitialized() {
-		err = ErrObjectTypeNotRegistered
+	err = tos.prepare()
+	if err != nil {
 		return
 	}
 
@@ -62,8 +62,8 @@ VALUES($1,$2,$3,$4,$5,$6)`,
 
 func (tos TenantObjectSet[objT, idT, shardKeyT]) Upsert(ctx convCtx.Context, obj objT) (err error) {
 
-	if !tos.isInitialized() {
-		err = ErrObjectTypeNotRegistered
+	err = tos.prepare()
+	if err != nil {
 		return
 	}
 

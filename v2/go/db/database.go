@@ -106,6 +106,11 @@ func Close() (err error) {
 			}
 		}
 	}
+	if err != nil {
+		return
+	}
+
+	dbs = nil
 	return
 }
 
@@ -114,6 +119,11 @@ func indexByShardKey(key string, count int) int {
 }
 
 func DBs(vault Vault, tenant convAuth.Tenant) ([]*sql.DB, error) {
+
+	err := Open()
+	if err != nil {
+		return nil, err
+	}
 
 	vdb, ok := dbs[vault]
 	if !ok {

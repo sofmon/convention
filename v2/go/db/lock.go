@@ -27,8 +27,8 @@ func (l Lock[objT, idT, shardKeyT]) Unlock() (err error) {
 
 func (tos TenantObjectSet[objT, idT, shardKeyT]) Lock(ctx convCtx.Context, obj objT, desc string) (lock *Lock[objT, idT, shardKeyT], err error) {
 
-	if !tos.isInitialized() {
-		err = ErrObjectTypeNotRegistered
+	err = tos.prepare()
+	if err != nil {
 		return
 	}
 

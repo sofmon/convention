@@ -10,8 +10,8 @@ import (
 
 func (tos TenantObjectSet[objT, idT, shardKeyT]) SelectAll(ctx convCtx.Context) (obs []objT, err error) {
 
-	if !tos.isInitialized() {
-		err = ErrObjectTypeNotRegistered
+	err = tos.prepare()
+	if err != nil {
 		return
 	}
 
@@ -59,8 +59,8 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) SelectAll(ctx convCtx.Context) 
 
 func (tos TenantObjectSet[objT, idT, shardKeyT]) SelectByID(ctx convCtx.Context, id idT, shardKeys ...shardKeyT) (obj *objT, err error) {
 
-	if !tos.isInitialized() {
-		err = ErrObjectTypeNotRegistered
+	err = tos.prepare()
+	if err != nil {
 		return
 	}
 
@@ -96,8 +96,8 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) SelectByID(ctx convCtx.Context,
 
 func (tos TenantObjectSet[objT, idT, shardKeyT]) Select(ctx convCtx.Context, where whereReady, shardKeys ...shardKeyT) (obs []objT, err error) {
 
-	if !tos.isInitialized() {
-		err = ErrObjectTypeNotRegistered
+	err = tos.prepare()
+	if err != nil {
 		return
 	}
 

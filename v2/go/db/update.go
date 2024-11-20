@@ -11,8 +11,8 @@ import (
 
 func (tos TenantObjectSet[objT, idT, shardKeyT]) Update(ctx convCtx.Context, obj objT) (err error) {
 
-	if !tos.isInitialized() {
-		err = ErrObjectTypeNotRegistered
+	err = tos.prepare()
+	if err != nil {
 		return
 	}
 
@@ -62,8 +62,8 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) Update(ctx convCtx.Context, obj
 
 func (tos TenantObjectSet[objT, idT, shardKeyT]) SafeUpdate(ctx convCtx.Context, from, to objT) (err error) {
 
-	if !tos.isInitialized() {
-		err = ErrObjectTypeNotRegistered
+	err = tos.prepare()
+	if err != nil {
 		return
 	}
 

@@ -67,29 +67,54 @@ func dbsForShardKeys[shardKeyT ~string](vault Vault, tenant convAuth.Tenant, sks
 	return dbsByShardKeys(vault, tenant, s...)
 }
 
-func registerObject[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](vault Vault, textSearch bool, indexes ...string) (table dbTable, err error) {
+func NewObjectSet[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](vault Vault, textSearch bool, indexes ...string) ObjectSet[objT, idT, shardKeyT] {
 
-	tenantDBs, ok := dbs[vault]
+	obj := new(objT)
+	objType := reflect.TypeOf(*obj)
+
+	return ObjectSet[objT, idT, shardKeyT]{
+		vault:   vault,
+		objType: objType,
+	}
+}
+
+type ObjectSet[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
+	prepared   bool
+	vault      Vault
+	textSearch bool
+	indexes    []string
+	objType    reflect.Type
+	table      dbTable
+}
+
+func (os *ObjectSet[objT, idT, shardKeyT]) prepare() (err error) {
+
+	if os.prepared {
+		return nil
+	}
+
+	err = Open()
+	if err != nil {
+		return
+	}
+
+	tenantDBs, ok := dbs[os.vault]
 	if !ok {
 		err = ErrNoDBVault
 		return
 	}
 
-	if _, ok := typeToTable[vault]; !ok {
-		typeToTable[vault] = map[reflect.Type]dbTable{}
+	if _, ok := typeToTable[os.vault]; !ok {
+		typeToTable[os.vault] = map[reflect.Type]dbTable{}
 	}
 
-	obj := new(objT)
-	objType := reflect.TypeOf(*obj)
-	objTypeName := objType.Name()
-
-	table, ok = typeToTable[vault][objType]
+	os.table, ok = typeToTable[os.vault][os.objType]
 	if ok {
 		return // object already registered for that vault
 	}
 
-	if len(indexes) != 0 {
-		for _, index := range indexes {
+	if len(os.indexes) != 0 {
+		for _, index := range os.indexes {
 			if index == textSearchIndex {
 				err = fmt.Errorf("cannot use '%s' as an index field as it is reserved for text search", textSearchIndex)
 				return
@@ -97,7 +122,7 @@ func registerObject[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string]
 		}
 	}
 
-	runtimeTableName := toSnakeCase(objType.Name())
+	runtimeTableName := toSnakeCase(os.objType.Name())
 	historyTableName := runtimeTableName + historySuffix
 	lockTableName := runtimeTableName + lockSuffix
 
@@ -109,7 +134,7 @@ func registerObject[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string]
 "updated_by" text NOT NULL,
 "object" JSONB NULL`
 
-	if textSearch {
+	if os.textSearch {
 		createScript += `,
 "text_search" tsvector GENERATED ALWAYS AS (jsonb_to_tsvector('english', "object", '["all"]')) STORED`
 	}
@@ -131,13 +156,13 @@ CREATE TABLE IF NOT EXISTS "` + lockTableName + `" (
 );
 `
 
-	for _, index := range indexes {
+	for _, index := range os.indexes {
 		createScript += `CREATE INDEX IF NOT EXISTS "` + runtimeTableName + `_` + index + `"
 ON "` + runtimeTableName + `" USING gin (("object"->'` + index + `'));
 `
 	}
 
-	if textSearch {
+	if os.textSearch {
 		createScript += `CREATE INDEX IF NOT EXISTS "` + runtimeTableName + `_` + textSearchIndex + `"
 ON "` + runtimeTableName + `" USING gin ("text_search");
 `
@@ -152,47 +177,18 @@ ON "` + runtimeTableName + `" USING gin ("text_search");
 		}
 	}
 
-	table = dbTable{
-		ObjectType:       objType,
-		ObjectTypeName:   objTypeName,
+	os.table = dbTable{
+		ObjectType:       os.objType,
+		ObjectTypeName:   os.objType.Name(),
 		RuntimeTableName: runtimeTableName,
 		HistoryTableName: historyTableName,
 		LockTableName:    lockTableName,
-		TextSearch:       textSearch,
+		TextSearch:       os.textSearch,
 	}
 
-	typeToTable[vault][objType] = table
+	typeToTable[os.vault][os.objType] = os.table
 
 	return
-}
-
-func NewObjectSet[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](vault Vault, textSearch bool, indexes ...string) (objSet ObjectSet[objT, idT, shardKeyT], err error) {
-
-	table, err := registerObject[objT](vault, textSearch, indexes...)
-	if err != nil {
-		return
-	}
-
-	obj := new(objT)
-	objType := reflect.TypeOf(*obj)
-
-	objSet = ObjectSet[objT, idT, shardKeyT]{
-		vault:   vault,
-		objType: objType,
-		table:   table,
-	}
-
-	return
-}
-
-type ObjectSet[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
-	vault   Vault
-	objType reflect.Type
-	table   dbTable
-}
-
-func (os ObjectSet[objT, idT, shardKeyT]) isInitialized() bool {
-	return os.vault != "" && os.table.ObjectType != nil && os.table.RuntimeTableName != ""
 }
 
 func (os ObjectSet[objT, idT, shardKeyT]) Tenant(tenant convAuth.Tenant) TenantObjectSet[objT, idT, shardKeyT] {
