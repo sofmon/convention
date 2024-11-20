@@ -1,26 +1,24 @@
 package db
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
+
+	convCtx "github.com/sofmon/convention/v2/go/ctx"
 )
 
-func (tos TenantObjectSet[objT, idT, shardKeyT]) Insert(obj objT) (err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) Insert(ctx convCtx.Context, obj objT) (err error) {
 
-	table, ok := typeToTable[tos.objType]
-	if !ok {
+	if !tos.isInitialized() {
 		err = ErrObjectTypeNotRegistered
 		return
 	}
 
-	trail := obj.Trail()
+	key := obj.DBKey()
 
-	var db *sql.DB
-	if table.Sharding {
-		db = dbByShardKey(tos.tenant, string(trail.ShardKey))
-	} else {
-		db = Default(tos.tenant)
+	db, err := dbByShardKey(tos.vault, tos.tenant, string(key.ShardKey))
+	if err != nil {
+		return
 	}
 
 	tx, err := db.Begin()
@@ -43,16 +41,18 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) Insert(obj objT) (err error) {
 		return
 	}
 
-	_, err = tx.Exec(`INSERT INTO "`+table.RuntimeTableName+`"
+	now, user := ctx.Now(), ctx.User()
+
+	_, err = tx.Exec(`INSERT INTO "`+tos.table.RuntimeTableName+`"
 ("id","created_at","created_by","updated_at","updated_by","object")
 VALUES($1,$2,$3,$4,$5,$6)`,
-		trail.ID, trail.CreatedAt, trail.CreatedBy, trail.UpdatedAt, trail.UpdatedBy, bytes)
+		key.ID, now, user, now, user, bytes)
 	if err != nil {
 		return
 	}
 
-	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT "id", "created_at", "created_by", "updated_at", "updated_by", "object" FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
-		trail.ID)
+	_, err = tx.Exec(`INSERT INTO "`+tos.table.HistoryTableName+`" SELECT "id", "created_at", "created_by", "updated_at", "updated_by", "object" FROM "`+tos.table.RuntimeTableName+`" WHERE "id"=$1`,
+		key.ID)
 	if err != nil {
 		return
 	}
@@ -60,21 +60,18 @@ VALUES($1,$2,$3,$4,$5,$6)`,
 	return
 }
 
-func (tos TenantObjectSet[objT, idT, shardKeyT]) Upsert(obj objT) (err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) Upsert(ctx convCtx.Context, obj objT) (err error) {
 
-	table, ok := typeToTable[tos.objType]
-	if !ok {
+	if !tos.isInitialized() {
 		err = ErrObjectTypeNotRegistered
 		return
 	}
 
-	trail := obj.Trail()
+	key := obj.DBKey()
 
-	var db *sql.DB
-	if table.Sharding {
-		db = dbByShardKey(tos.tenant, string(trail.ShardKey))
-	} else {
-		db = Default(tos.tenant)
+	db, err := dbByShardKey(tos.vault, tos.tenant, string(key.ShardKey))
+	if err != nil {
+		return
 	}
 
 	tx, err := db.Begin()
@@ -97,18 +94,20 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) Upsert(obj objT) (err error) {
 		return
 	}
 
-	_, err = tx.Exec(`INSERT INTO "`+table.RuntimeTableName+`"
+	now, user := ctx.Now(), ctx.User()
+
+	_, err = tx.Exec(`INSERT INTO "`+tos.table.RuntimeTableName+`"
 ("id","created_at","created_by","updated_at","updated_by","object")
 VALUES($1,$2,$3,$4,$5,$6)
 ON CONFLICT ("id")
 DO UPDATE SET "updated_at"=$4,"updated_by"=$5,"object"=$6`,
-		trail.ID, trail.CreatedAt, trail.CreatedBy, trail.UpdatedAt, trail.UpdatedBy, bytes)
+		key.ID, now, user, now, user, bytes)
 	if err != nil {
 		return
 	}
 
-	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT "id", "created_at", "created_by", "updated_at", "updated_by", "object" FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
-		trail.ID)
+	_, err = tx.Exec(`INSERT INTO "`+tos.table.HistoryTableName+`" SELECT "id", "created_at", "created_by", "updated_at", "updated_by", "object" FROM "`+tos.table.RuntimeTableName+`" WHERE "id"=$1`,
+		key.ID)
 	if err != nil {
 		return
 	}

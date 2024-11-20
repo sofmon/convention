@@ -48,7 +48,7 @@ func (ctx Context) WithRequest(r *http.Request) (res Context) {
 		res = Context{
 			context.WithValue(
 				res.Context,
-				contextKeyRequestClaims,
+				contextKeyClaims,
 				claims,
 			),
 		}
@@ -57,12 +57,20 @@ func (ctx Context) WithRequest(r *http.Request) (res Context) {
 	return
 }
 
-func (ctx Context) Workflow() (wid Workflow) {
-	return ctx.Value(contextKeyRequest).(Workflow)
+func (ctx Context) Workflow() Workflow {
+	obj := ctx.Value(contextKeyWorkflow)
+	if obj == nil {
+		return ""
+	}
+	return obj.(Workflow)
 }
 
-func (ctx Context) Action() (act convAuth.Action) {
-	return ctx.Value(contextKeyAction).(convAuth.Action)
+func (ctx Context) Action() convAuth.Action {
+	obj := ctx.Value(contextKeyAction)
+	if obj == nil {
+		return ""
+	}
+	return obj.(convAuth.Action)
 }
 
 func (ctx Context) Request() (r *http.Request) {
@@ -71,12 +79,4 @@ func (ctx Context) Request() (r *http.Request) {
 		return
 	}
 	return obj.(*http.Request)
-}
-
-func (ctx Context) RequestClaims() (claims convAuth.Claims) {
-	obj := ctx.Value(contextKeyRequestClaims)
-	if obj == nil {
-		return
-	}
-	return obj.(convAuth.Claims)
 }

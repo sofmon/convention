@@ -3,6 +3,7 @@ package ctx
 import (
 	"context"
 
+	"github.com/google/uuid"
 	convAuth "github.com/sofmon/convention/v2/go/auth"
 	convCfg "github.com/sofmon/convention/v2/go/cfg"
 )
@@ -15,40 +16,62 @@ type contextKey int
 
 const (
 	contextKeyAgent contextKey = iota
-	contextKeyRoles
+	contextKeyAgentClaims
+	contextKeyUseAgentClaims
 	contextKeyEnv
 	contextKeyRequest
-	contextKeyRequestClaims
+	contextKeyClaims
 	contextKeyAction
 	contextKeyWorkflow
 	contextKeyScope
-	contextKeyAgentUser
 )
 
 type Agent string
 
-func New(agent Agent) (ctx Context) {
-	return WrapContext(context.Background(), agent)
+func New(claims convAuth.Claims) (ctx Context) {
+	return WrapContext(context.Background(), claims)
 }
 
-func WrapContext(parent context.Context, agent Agent) (ctx Context) {
+func WrapContext(parent context.Context, claims convAuth.Claims) (ctx Context) {
 
-	ctx.Context = context.WithValue(parent, contextKeyAgent, agent)
-	ctx.Context = context.WithValue(ctx.Context, contextKeyEnv, getEnv())
+	agent := Agent(claims.User)
+
+	ctx.Context = context.WithValue(parent, contextKeyEnv, getEnv())
+	ctx.Context = context.WithValue(ctx.Context, contextKeyAgent, agent)
+	ctx.Context = context.WithValue(ctx.Context, contextKeyAgentClaims, claims)
+	ctx.Context = context.WithValue(ctx.Context, contextKeyClaims, claims)
+	ctx.Context = context.WithValue(ctx.Context, contextKeyWorkflow, Workflow(uuid.NewString()))
 
 	ctx = ctx.WithScope(string(agent)) // Use agent name as the initial scope
 
 	return
 }
 
-func (ctx Context) WithRoles(roles ...convAuth.Role) Context {
+func (ctx Context) WithClaims(claims convAuth.Claims) Context {
 	return Context{
 		context.WithValue(
 			ctx.Context,
-			contextKeyRoles,
-			roles,
+			contextKeyClaims,
+			claims,
 		),
 	}
+}
+
+func (ctx Context) Claims() (claims convAuth.Claims) {
+
+	if ctx.mustUseAgentClaims() {
+		obj := ctx.Value(contextKeyAgentClaims)
+		if obj == nil {
+			return
+		}
+		return obj.(convAuth.Claims)
+	}
+
+	obj := ctx.Value(contextKeyClaims)
+	if obj == nil {
+		return
+	}
+	return obj.(convAuth.Claims)
 }
 
 func getEnv() Environment {
@@ -62,9 +85,9 @@ func getEnv() Environment {
 }
 
 func (ctx Context) Agent() Agent {
-	return ctx.Value(contextKeyAgent).(Agent)
-}
-
-func (ctx Context) AgentRoles() convAuth.Roles {
-	return ctx.Value(contextKeyRoles).(convAuth.Roles)
+	obj := ctx.Value(contextKeyAgent)
+	if obj == nil {
+		return ""
+	}
+	return obj.(Agent)
 }

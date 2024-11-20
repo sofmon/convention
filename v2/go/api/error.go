@@ -11,6 +11,8 @@ const (
 	ErrorCodeInternalError ErrorCode = "internal_error"
 	ErrorCodeNotFound      ErrorCode = "not_found"
 	ErrorCodeBadRequest    ErrorCode = "bad_request"
+	ErrorCodeForbidden     ErrorCode = "forbidden"
+	ErrorCodeUnauthorized  ErrorCode = "unauthorized"
 )
 
 func NewError(status int, code ErrorCode, message string) (err error) {

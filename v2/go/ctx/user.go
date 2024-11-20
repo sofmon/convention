@@ -5,8 +5,5 @@ import (
 )
 
 func (ctx Context) User() auth.User {
-	if ctx.MustUseAgentUser() {
-		return auth.User(ctx.Agent())
-	}
-	return ctx.RequestClaims().User
+	return ctx.Claims().User
 }

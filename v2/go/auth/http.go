@@ -18,6 +18,7 @@ const (
 var (
 	hmacSecret []byte
 
+	ErrMissingRequest             = errors.New("HTTP request is nil")
 	ErrMissingAuthorizationHeader = errors.New("HTTP request has no valid Bearer authentication; expecting header like 'Authorization: Bearer <token>'")
 	ErrInvalidAuthorizationToken  = errors.New("HTTP request has invalid bearer token'")
 )
@@ -120,22 +121,25 @@ func DecodeToken(tokenString string) (res Claims, err error) {
 	if user, ok := claims[claimUser].(string); ok {
 		res.User = User(user)
 	}
-	if entities, ok := claims[claimEntities].([]string); ok {
+
+	if entities, ok := claims[claimEntities].([]any); ok {
 		res.Entities = make(Entities, len(entities))
 		for i, entity := range entities {
-			res.Entities[i] = Entity(entity)
+			res.Entities[i] = Entity(entity.(string))
 		}
 	}
-	if tenants, ok := claims[claimTenants].([]string); ok {
+
+	if tenants, ok := claims[claimTenants].([]any); ok {
 		res.Tenants = make(Tenants, len(tenants))
 		for i, tenant := range tenants {
-			res.Tenants[i] = Tenant(tenant)
+			res.Tenants[i] = Tenant(tenant.(string))
 		}
 	}
-	if roles, ok := claims[claimRoles].([]string); ok {
+
+	if roles, ok := claims[claimRoles].([]any); ok {
 		res.Roles = make(Roles, len(roles))
 		for i, role := range roles {
-			res.Roles[i] = Role(role)
+			res.Roles[i] = Role(role.(string))
 		}
 	}
 

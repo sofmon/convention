@@ -29,22 +29,9 @@ func setContextHttpHeaders(ctx convCtx.Context, r *http.Request) (err error) {
 	r.Header.Add(convCtx.HttpHeaderWorkflow, string(ctx.Workflow()))
 	r.Header.Add(httpHeaderAgent, string(ctx.Agent()))
 
-	inReq := ctx.Request()
-
-	if inReq == nil || ctx.MustUseAgentUser() {
-		agentClaims := convAuth.Claims{
-			User:  convAuth.User(ctx.Agent()),
-			Roles: ctx.AgentRoles(),
-		}
-		err = convAuth.EncodeHTTPRequestClaims(r, agentClaims)
-		if err != nil {
-			return
-		}
-	} else {
-		authHeader := inReq.Header.Get(httpHeaderAuthorization)
-		if authHeader != "" {
-			r.Header.Add(httpHeaderAuthorization, authHeader)
-		}
+	err = convAuth.EncodeHTTPRequestClaims(r, ctx.Claims())
+	if err != nil {
+		return
 	}
 
 	return

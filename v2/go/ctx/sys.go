@@ -2,18 +2,18 @@ package ctx
 
 import "context"
 
-func (ctx Context) WithAgentUser() Context {
+func (ctx Context) WithAgentClaims() Context {
 	return Context{
 		context.WithValue(
 			ctx.Context,
-			contextKeyAgentUser,
+			contextKeyUseAgentClaims,
 			true,
 		),
 	}
 }
 
-func (ctx Context) MustUseAgentUser() bool {
-	obj := ctx.Value(contextKeyAgentUser)
+func (ctx Context) mustUseAgentClaims() bool {
+	obj := ctx.Value(contextKeyUseAgentClaims)
 	if obj == nil {
 		return false
 	}

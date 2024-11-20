@@ -1,4 +1,4 @@
-# convention/v2
+# Convention/v2
 
 ## Purpose and Scope
 
@@ -139,22 +139,22 @@ In JSON format a simple configuration can look like:
 {
     "roles": {
         "user": [
-            "can_send_tenant_messages",
-            "can_read_own_messages"
+            "write_tenant_messages",
+            "read_own_messages"
         ],
         "admin": [
-            "can_send_tenant_messages",
-            "can_read_tenant_messages"
+            "write_tenant_messages",
+            "read_tenant_messages"
         ]
     },
     "permissions": {
-        "can_send_tenant_messages": [
+        "write_tenant_messages": [
             "PUT /message/v1/tenants/{tenant}/entities/{any}/messages/{any}"
         ],
-        "can_read_tenant_messages": [
+        "read_tenant_messages": [
             "GET /message/v1/tenants/{tenant}/entities/{any}/messages/{any}"
         ],
-        "can_read_own_messages": [
+        "read_own_messages": [
             "GET /message/v1/tenants/{tenant}/entities/{entity}/messages/{any}"
         ]
     },
@@ -199,7 +199,7 @@ This approach facilitates schema updates or database engine changes as part of t
 
 ### Multitenancy
 
-The multi-tenancy described in chapter "2.3 Multi-tenant" is directly implemented in the database. Each **tenant** has its own database connection, ensuring data isolation and security.
+The multi-tenancy is directly implemented in the database. Each **tenant** has its own database connection, ensuring data isolation and security.
 
 ### Sharding
 

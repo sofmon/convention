@@ -2,6 +2,7 @@ package db
 
 import (
 	_ "github.com/lib/pq"
+	_ "github.com/mattn/go-sqlite3"
 
 	"database/sql"
 	"errors"
@@ -16,77 +17,79 @@ type Engine string
 
 const (
 	EnginePostgres Engine = "postgres"
+	EngineSqlite   Engine = "sqlite"
 
 	configKeyDatabase convCfg.ConfigKey = "database"
 )
 
-type Version string
+type Vault string
 
 type connection struct {
+	Engine   Engine `json:"engine"`
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
+	InMemory bool   `json:"in_memory"`
 	Database string `json:"database"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
-type connections struct {
-	Default *connection  `json:"default,omitempty"`
-	Shards  []connection `json:"shards,omitempty"`
-}
-
-type config struct {
-	Versions map[Version]struct {
-		Engine  Engine                          `json:"engine"`
-		Tenants map[convAuth.Tenant]connections `json:"tenants"`
-	} `json:"versions"`
-}
+type connections []connection
 
 func (conn connection) Open() (*sql.DB, error) {
-	return sql.Open(
-		"postgres",
-		fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=require",
-			conn.Host, conn.Port, conn.Username, conn.Password, conn.Database,
-		),
-	)
+	switch conn.Engine {
+	case EnginePostgres:
+		return sql.Open(
+			"postgres",
+			fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=require",
+				conn.Host, conn.Port, conn.Username, conn.Password, conn.Database,
+			),
+		)
+	case EngineSqlite:
+		if conn.InMemory {
+			return sql.Open("sqlite3", ":memory:")
+		} else {
+			// TODO: implement file-based sqlite databases
+			return nil, errors.New("sqlite engine does not support file-based databases")
+		}
+	default:
+		return nil, errors.New(fmt.Sprintf("unsupported engine: %s", conn.Engine))
+	}
 }
 
-func Open(version Version) (err error) {
+type config map[Vault]map[convAuth.Tenant]connections
 
-	fullCfg, err := convCfg.Object[config](configKeyDatabase)
+var (
+	dbs map[Vault]map[convAuth.Tenant][]*sql.DB
+
+	ErrNoDBTenant = errors.New("db is not configured with provided tenant")
+	ErrNoDBVault  = errors.New("db is not configured with provided vault")
+)
+
+func Open() (err error) {
+
+	if dbs != nil {
+		return
+	}
+
+	dbs = make(map[Vault]map[convAuth.Tenant][]*sql.DB)
+
+	cfg, err := convCfg.Object[config](configKeyDatabase)
 	if err != nil {
 		return
 	}
 
-	versionCfg, ok := fullCfg.Versions[version]
-	if !ok {
-		return fmt.Errorf("database configuration does not contain the requested configuration version '%s'", version)
-	}
-
-	if versionCfg.Engine != EnginePostgres {
-		return fmt.Errorf("database implementation does not support engine '%s'", versionCfg.Engine)
-	}
-
-	for tenant, tenantCfg := range versionCfg.Tenants {
-
-		var tdb tenantDB
-
-		if tenantCfg.Default != nil {
-			tdb.Default, err = tenantCfg.Default.Open()
-			if err != nil {
-				return
+	for vault, vaultCfg := range cfg {
+		dbs[vault] = make(map[convAuth.Tenant][]*sql.DB)
+		for tenant, tenantCfg := range vaultCfg {
+			for _, conn := range tenantCfg {
+				db, err := conn.Open()
+				if err != nil {
+					return err
+				}
+				dbs[vault][tenant] = append(dbs[vault][tenant], db)
 			}
 		}
-
-		for _, shard := range tenantCfg.Shards {
-			shardDB, err := shard.Open()
-			if err != nil {
-				return err
-			}
-			tdb.Shards = append(tdb.Shards, shardDB)
-		}
-
-		dbs[tenant] = tdb
 	}
 
 	return
@@ -94,98 +97,80 @@ func Open(version Version) (err error) {
 
 func Close() (err error) {
 	for _, db := range dbs {
-		if db.Default != nil {
-			err = db.Default.Close()
-		}
-		for _, shard := range db.Shards {
-			err = errors.Join(
-				err,
-				shard.Close(),
-			)
+		for _, db := range db {
+			for _, db := range db {
+				err = errors.Join(
+					err,
+					db.Close(),
+				)
+			}
 		}
 	}
 	return
 }
-
-type tenantDB struct {
-	Default *sql.DB
-	Shards  []*sql.DB
-}
-
-var (
-	dbs = map[convAuth.Tenant]tenantDB{}
-)
-
-var (
-	ErrNoDBTenant  = errors.New("data is not configured with provided tenant")
-	ErrNoDBDefault = errors.New("data is not configured with default database")
-	ErrNoDBShards  = errors.New("data is not configured with database shards")
-)
 
 func indexByShardKey(key string, count int) int {
 	return int(crc32.ChecksumIEEE([]byte(key)) % uint32(count))
 }
 
-func Default(tenant convAuth.Tenant) *sql.DB {
+func DBs(vault Vault, tenant convAuth.Tenant) ([]*sql.DB, error) {
 
-	tdb, ok := dbs[tenant]
+	vdb, ok := dbs[vault]
 	if !ok {
-		panic(ErrNoDBTenant)
+		return nil, ErrNoDBVault
 	}
 
-	if tdb.Default == nil {
-		panic(ErrNoDBDefault)
+	tdb, ok := vdb[tenant]
+	if !ok {
+		return nil, ErrNoDBTenant
 	}
 
-	return tdb.Default
+	return tdb, nil
 }
 
-func Shards(tenant convAuth.Tenant) []*sql.DB {
+func dbByShardKey(vault Vault, tenant convAuth.Tenant, key string) (*sql.DB, error) {
 
-	tdb, ok := dbs[tenant]
-	if !ok {
-		panic(ErrNoDBTenant)
+	dbs, err := DBs(vault, tenant)
+	if err != nil {
+		return nil, err
 	}
 
-	if !ok || len(tdb.Shards) <= 0 {
-		panic(ErrNoDBShards)
+	if len(dbs) <= 0 {
+		return nil, ErrNoDBTenant
 	}
-	return tdb.Shards
+
+	if len(dbs) > 1 {
+		return dbs[indexByShardKey(key, len(dbs))], nil
+	}
+
+	return dbs[0], nil
 }
 
-func dbByShardKey(tenant convAuth.Tenant, key string) *sql.DB {
+func dbsByShardKeys(vault Vault, tenant convAuth.Tenant, keys ...string) ([]*sql.DB, error) {
 
-	tdb, ok := dbs[tenant]
-	if !ok {
-		panic(ErrNoDBTenant)
+	dbs, err := DBs(vault, tenant)
+	if err != nil {
+		return nil, err
 	}
 
-	if len(tdb.Shards) <= 0 {
-		panic(ErrNoDBShards)
-	}
-	return tdb.Shards[indexByShardKey(key, len(tdb.Shards))]
-}
-
-func dbsByShardKeys(tenant convAuth.Tenant, keys ...string) (res []*sql.DB) {
-
-	tdb, ok := dbs[tenant]
-	if !ok {
-		panic(ErrNoDBTenant)
+	if len(dbs) <= 0 {
+		return nil, ErrNoDBTenant
 	}
 
-	if len(tdb.Shards) <= 0 {
-		panic(ErrNoDBShards)
+	if len(keys) == 0 {
+		return dbs, nil
 	}
 
 	sis := map[int]any{}
 
 	for _, key := range keys {
-		si := indexByShardKey(key, len(tdb.Shards))
-		sis[si] = nil
+		sis[indexByShardKey(key, len(dbs))] = nil
 	}
 
+	var res []*sql.DB
 	for si := range sis {
-		res = append(res, tdb.Shards[si])
+		res = append(res, dbs[si])
 	}
-	return
+
+	return res, nil
 }

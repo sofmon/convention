@@ -5,23 +5,22 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	convCtx "github.com/sofmon/convention/v2/go/ctx"
 )
 
-func (tos TenantObjectSet[objT, idT, shardKeyT]) Update(obj objT) (err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) Update(ctx convCtx.Context, obj objT) (err error) {
 
-	table, ok := typeToTable[tos.objType]
-	if !ok {
+	if !tos.isInitialized() {
 		err = ErrObjectTypeNotRegistered
 		return
 	}
 
-	trail := obj.Trail()
+	key := obj.DBKey()
 
-	var db *sql.DB
-	if table.Sharding {
-		db = dbByShardKey(tos.tenant, string(trail.ShardKey))
-	} else {
-		db = Default(tos.tenant)
+	db, err := dbByShardKey(tos.vault, tos.tenant, string(key.ShardKey))
+	if err != nil {
+		return
 	}
 
 	tx, err := db.Begin()
@@ -44,14 +43,16 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) Update(obj objT) (err error) {
 		return
 	}
 
-	_, err = tx.Exec(`UPDATE "`+table.RuntimeTableName+`" SET "object"=$1, "updated_at"=$2, "updated_by"=$3 WHERE "id"=$4`,
-		bytes, trail.UpdatedAt, trail.UpdatedBy, trail.ID)
+	now, user := ctx.Now(), ctx.User()
+
+	_, err = tx.Exec(`UPDATE "`+tos.table.RuntimeTableName+`" SET "object"=$1, "updated_at"=$2, "updated_by"=$3 WHERE "id"=$4`,
+		bytes, now, user, key.ID)
 	if err != nil {
 		return
 	}
 
-	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT "id", "created_at", "created_by", "updated_at", "updated_by", "object" FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
-		trail.ID)
+	_, err = tx.Exec(`INSERT INTO "`+tos.table.HistoryTableName+`" SELECT "id", "created_at", "created_by", "updated_at", "updated_by", "object" FROM "`+tos.table.RuntimeTableName+`" WHERE "id"=$1`,
+		key.ID)
 	if err != nil {
 		return
 	}
@@ -59,31 +60,28 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) Update(obj objT) (err error) {
 	return
 }
 
-func (tos TenantObjectSet[objT, idT, shardKeyT]) SafeUpdate(from, to objT) (err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) SafeUpdate(ctx convCtx.Context, from, to objT) (err error) {
 
-	table, ok := typeToTable[tos.objType]
-	if !ok {
+	if !tos.isInitialized() {
 		err = ErrObjectTypeNotRegistered
 		return
 	}
 
-	fromTrail, toTrail := from.Trail(), to.Trail()
+	fromKey, toKey := from.DBKey(), to.DBKey()
 
-	if fromTrail.ID != toTrail.ID {
+	if fromKey.ID != toKey.ID {
 		err = errors.New("cannot safely update object with different IDs")
 		return
 	}
 
-	if fromTrail.ShardKey != toTrail.ShardKey {
+	if fromKey.ShardKey != toKey.ShardKey {
 		err = errors.New("cannot safely update object with different shard keys")
 		return
 	}
 
-	var db *sql.DB
-	if table.Sharding {
-		db = dbByShardKey(tos.tenant, string(fromTrail.ShardKey))
-	} else {
-		db = Default(tos.tenant)
+	db, err := dbByShardKey(tos.vault, tos.tenant, string(fromKey.ShardKey))
+	if err != nil {
+		return
 	}
 
 	tx, err := db.Begin()
@@ -105,10 +103,10 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) SafeUpdate(from, to objT) (err 
 		cmp     objT
 		cmpHash string
 	)
-	row := tx.QueryRow(`SELECT "object", md5("object") FROM "`+table.RuntimeTableName+`" WHERE "id"=$1 FOR UPDATE NOWAIT`, fromTrail.ID)
+	row := tx.QueryRow(`SELECT "object", md5("object") FROM "`+tos.table.RuntimeTableName+`" WHERE "id"=$1 FOR UPDATE NOWAIT`, fromKey.ID)
 	err = row.Scan(&cmp, &cmpHash)
 	if err == sql.ErrNoRows {
-		return fmt.Errorf("object with ID '%s' does not exist", fromTrail.ID)
+		return fmt.Errorf("object with ID '%s' does not exist", fromKey.ID)
 	}
 	if err != nil {
 		return
@@ -125,7 +123,7 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) SafeUpdate(from, to objT) (err 
 	}
 
 	if string(cmpBytes) != string(fromBytes) {
-		return fmt.Errorf("object with ID '%s' has been modified since it was retrieved", fromTrail.ID)
+		return fmt.Errorf("object with ID '%s' has been modified since it was retrieved", fromKey.ID)
 	}
 
 	toBytes, err := json.Marshal(to)
@@ -133,8 +131,10 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) SafeUpdate(from, to objT) (err 
 		return
 	}
 
-	res, err := tx.Exec(`UPDATE "`+table.RuntimeTableName+`" SET "object"=$1, "updated_at"=$2, "updated_by"=$3 WHERE "id"=$4 AND md5("object")=$5`,
-		toBytes, toTrail.UpdatedAt, toTrail.UpdatedBy, toTrail.ID, cmpHash)
+	now, user := ctx.Now(), ctx.User()
+
+	res, err := tx.Exec(`UPDATE "`+tos.table.RuntimeTableName+`" SET "object"=$1, "updated_at"=$2, "updated_by"=$3 WHERE "id"=$4 AND md5("object")=$5`,
+		toBytes, now, user, toKey.ID, cmpHash)
 	if err != nil {
 		return
 	}
@@ -145,11 +145,11 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) SafeUpdate(from, to objT) (err 
 	}
 
 	if count == 0 {
-		return fmt.Errorf("object with ID '%s' has been modified since it was retrieved", fromTrail.ID)
+		return fmt.Errorf("object with ID '%s' has been modified since it was retrieved", fromKey.ID)
 	}
 
-	_, err = tx.Exec(`INSERT INTO "`+table.HistoryTableName+`" SELECT "id", "created_at", "created_by", "updated_at", "updated_by", "object" FROM "`+table.RuntimeTableName+`" WHERE "id"=$1`,
-		toTrail.ID)
+	_, err = tx.Exec(`INSERT INTO "`+tos.table.HistoryTableName+`" SELECT "id", "created_at", "created_by", "updated_at", "updated_by", "object" FROM "`+tos.table.RuntimeTableName+`" WHERE "id"=$1`,
+		toKey.ID)
 	if err != nil {
 		return
 	}

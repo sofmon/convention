@@ -3,6 +3,8 @@ package db
 import (
 	"database/sql"
 	"errors"
+
+	convCtx "github.com/sofmon/convention/v2/go/ctx"
 )
 
 type exec struct {
@@ -17,19 +19,17 @@ func Exec(statement string, params ...any) exec {
 	}
 }
 
-func (tos TenantObjectSet[objT, idT, shardKeyT]) Exec(exec exec, shardKeys ...shardKeyT) (err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) Exec(ctx convCtx.Context, exec exec, shardKeys ...shardKeyT) (err error) {
 
-	table, ok := typeToTable[tos.objType]
-	if !ok {
+	if !tos.isInitialized() {
 		err = ErrObjectTypeNotRegistered
 		return
 	}
 
 	var dbs []*sql.DB
-	if table.Sharding {
-		dbs = dbsForShardKeys(tos.tenant, shardKeys...)
-	} else {
-		dbs = []*sql.DB{Default(tos.tenant)}
+	dbs, err = dbsForShardKeys(tos.vault, tos.tenant, shardKeys...)
+	if err != nil {
+		return
 	}
 
 	txs := make([]*sql.Tx, len(dbs))

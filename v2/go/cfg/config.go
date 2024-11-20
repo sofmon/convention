@@ -9,10 +9,6 @@ import (
 
 type ConfigKey string
 
-const (
-	ConfigKeyAppConfig = "app-config"
-)
-
 var configLocation = "/etc/app/"
 
 func SetConfigLocation(folder string) error {

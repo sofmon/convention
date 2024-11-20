@@ -1,8 +1,7 @@
 package db
 
 import (
-	"database/sql"
-	"time"
+	convCtx "github.com/sofmon/convention/v2/go/ctx"
 )
 
 type Lock[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
@@ -12,20 +11,13 @@ type Lock[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
 }
 
 func (l Lock[objT, idT, shardKeyT]) Unlock() (err error) {
-	table, ok := typeToTable[l.tos.objType]
-	if !ok {
-		err = ErrObjectTypeNotRegistered
+
+	db, err := dbByShardKey(l.tos.vault, l.tos.tenant, string(l.sk))
+	if err != nil {
 		return
 	}
 
-	var db *sql.DB
-	if table.Sharding {
-		db = dbByShardKey(l.tos.tenant, string(l.sk))
-	} else {
-		db = Default(l.tos.tenant)
-	}
-
-	_, err = db.Exec(`DELETE FROM "`+table.LockTableName+`"WHERE "id"=$1;`, l.id)
+	_, err = db.Exec(`DELETE FROM "`+l.tos.table.LockTableName+`"WHERE "id"=$1;`, l.id)
 	if err != nil {
 		return
 	}
@@ -33,28 +25,25 @@ func (l Lock[objT, idT, shardKeyT]) Unlock() (err error) {
 	return
 }
 
-func (tos TenantObjectSet[objT, idT, shardKeyT]) Lock(obj objT, desc string) (lock *Lock[objT, idT, shardKeyT], err error) {
+func (tos TenantObjectSet[objT, idT, shardKeyT]) Lock(ctx convCtx.Context, obj objT, desc string) (lock *Lock[objT, idT, shardKeyT], err error) {
 
-	table, ok := typeToTable[tos.objType]
-	if !ok {
+	if !tos.isInitialized() {
 		err = ErrObjectTypeNotRegistered
 		return
 	}
 
-	trail := obj.Trail()
+	key := obj.DBKey()
 
-	var db *sql.DB
-	if table.Sharding {
-		db = dbByShardKey(tos.tenant, string(trail.ShardKey))
-	} else {
-		db = Default(tos.tenant)
+	db, err := dbByShardKey(tos.vault, tos.tenant, string(key.ShardKey))
+	if err != nil {
+		return
 	}
 
-	res, err := db.Exec(`INSERT INTO "`+table.LockTableName+`"
+	res, err := db.Exec(`INSERT INTO "`+tos.table.LockTableName+`"
 ("id","created_at","description")
 VALUES($1,$2,$3)
 ON CONFLICT ("id") DO NOTHING;`,
-		trail.ID, time.Now().UTC(), desc)
+		key.ID, ctx.Now(), desc)
 	if err != nil {
 		return
 	}
@@ -70,8 +59,8 @@ ON CONFLICT ("id") DO NOTHING;`,
 
 	lock = &Lock[objT, idT, shardKeyT]{
 		tos: tos,
-		sk:  trail.ShardKey,
-		id:  trail.ID,
+		sk:  key.ShardKey,
+		id:  key.ID,
 	}
 
 	return

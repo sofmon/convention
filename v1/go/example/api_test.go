@@ -35,7 +35,7 @@ type API struct {
 
 func Test_server_and_client(t *testing.T) {
 
-	convCfg.SetConfigLocation("./.secret")
+	convCfg.SetConfigLocation("../../../.secret")
 
 	ctx := convCtx.NewContext("Test_server_and_client")
 
