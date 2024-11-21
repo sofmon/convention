@@ -52,6 +52,17 @@ func (ctx Context) WithRequest(r *http.Request) (res Context) {
 				claims,
 			),
 		}
+	} else {
+		// empty the claims to ensure that the context
+		// would not provide the agent claims without
+		// explicit ctx.WithAgentClaims() call
+		res = Context{
+			context.WithValue(
+				res.Context,
+				contextKeyClaims,
+				convAuth.Claims{},
+			),
+		}
 	}
 
 	return

@@ -112,12 +112,21 @@ const (
 )
 
 type object struct {
+	ID        string             `json:"id"`
 	Name      string             `json:"name"`
 	Type      objectType         `json:"type"`
 	Mandatory bool               `json:"mandatory"`
 	Elem      *object            `json:"elem"`
 	Key       *object            `json:"key"`
 	Fields    map[string]*object `json:"fields"`
+}
+
+// Remove package name from a fully qualified type name
+func removePrefixBeforeDot(s string) string {
+	if dotIndex := strings.LastIndex(s, "."); dotIndex != -1 {
+		return s[dotIndex+1:]
+	}
+	return s // No package name found
 }
 
 func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
@@ -134,7 +143,8 @@ func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
 		t = t.Elem() // Dereference if it's a pointer
 	}
 
-	o.Name = t.String()
+	o.Name = removePrefixBeforeDot(t.String())
+	o.ID = t.PkgPath() + "/" + o.Name
 
 	for _, known := range knownObjects {
 		if known.Name == o.Name {

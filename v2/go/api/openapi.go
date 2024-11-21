@@ -78,6 +78,17 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 		populateSchemas(schemas, desc.out)
 	}
 
+	var uniqueNames = make(map[string]int)
+	uniqueName := func(o object) string {
+		name := snakeName(o.Name)
+		if _, ok := uniqueNames[o.ID]; !ok {
+			uniqueNames[o.ID] = 0
+			return name
+		}
+		uniqueNames[o.ID]++
+		return fmt.Sprintf("%s_%d", name, uniqueNames[o.ID])
+	}
+
 	sb := strings.Builder{}
 
 	sb.WriteString("openapi: 3.0.0\n")
@@ -86,8 +97,8 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 	sb.WriteString("  version: 1.0.0\n")
 	sb.WriteString("components:\n")
 	sb.WriteString("  schemas:\n")
-	for name, schema := range schemas {
-		sb.WriteString(fmt.Sprintf("    %s:\n", snakeName(name)))
+	for _, schema := range schemas {
+		sb.WriteString(fmt.Sprintf("    %s:\n", uniqueName(schema)))
 		sb.WriteString(fmt.Sprintf("      type: %s\n", schema.Type))
 		switch schema.Type {
 		case objectTypeArray:
@@ -95,14 +106,14 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 			if schema.Elem.Type.IsSimple() {
 				sb.WriteString(fmt.Sprintf("        type: %s\n", schema.Elem.Type))
 			} else {
-				sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", snakeName(schema.Elem.Name)))
+				sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", uniqueName(*schema.Elem)))
 			}
 		case objectTypeMap:
 			sb.WriteString("      additionalProperties:\n")
 			if schema.Elem.Type.IsSimple() {
 				sb.WriteString(fmt.Sprintf("        type: %s\n", schema.Elem.Type))
 			} else {
-				sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", snakeName(schema.Elem.Name)))
+				sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", uniqueName(*schema.Elem)))
 			}
 		case objectTypeObject:
 			if len(schema.Fields) > 0 {
@@ -112,7 +123,7 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 					if obj.Type.IsSimple() {
 						sb.WriteString(fmt.Sprintf("          type: %s\n", obj.Type))
 					} else {
-						sb.WriteString(fmt.Sprintf("          $ref: '#/components/schemas/%s'\n", snakeName(obj.Name)))
+						sb.WriteString(fmt.Sprintf("          $ref: '#/components/schemas/%s'\n", uniqueName(*obj)))
 					}
 					if obj.Mandatory {
 						sb.WriteString("          nullable: false\n")
@@ -169,8 +180,6 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 	}
 
 	x.yaml = sb.String()
-
-	fmt.Println(x.yaml)
 
 	w.Header().Set("Content-Type", "application/yaml")
 	w.Write([]byte(x.yaml))
