@@ -79,14 +79,19 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 	}
 
 	var uniqueNames = make(map[string]int)
+	var knownNames = make(map[string]string)
 	uniqueName := func(o object) string {
-		name := snakeName(o.Name)
-		if _, ok := uniqueNames[o.ID]; !ok {
-			uniqueNames[o.ID] = 0
+		if name, op := knownNames[o.ID]; op {
 			return name
 		}
-		uniqueNames[o.ID]++
-		return fmt.Sprintf("%s_%d", name, uniqueNames[o.ID])
+		name := snakeName(o.Name)
+		if _, ok := uniqueNames[name]; !ok {
+			uniqueNames[name] = 0
+			knownNames[o.ID] = name
+			return name
+		}
+		uniqueNames[name]++
+		return fmt.Sprintf("%s_%d", name, uniqueNames[name])
 	}
 
 	sb := strings.Builder{}
