@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -12,6 +13,13 @@ import (
 	convCtx "github.com/sofmon/convention/v2/go/ctx"
 )
 
+type Enum string
+
+const (
+	EnumValue1 Enum = "enum_value_1"
+	EnumValue2 Enum = "enum_value_2"
+)
+
 type ComplexMarshallObject struct {
 	unexportedField1 string
 	unexportedField2 int
@@ -21,6 +29,7 @@ type ComplexMarshallObject struct {
 type SubstitutionObject struct {
 	ShowField1 int
 	ShowField2 *float64
+	EnumField  Enum
 }
 
 func Test_openapi_substitution(t *testing.T) {
@@ -44,6 +53,12 @@ func Test_openapi_substitution(t *testing.T) {
 					).
 					WithTypeSubstitutions(
 						convAPI.NewTypeSubstitution[ComplexMarshallObject, SubstitutionObject](),
+					).
+					WithEnums(
+						convAPI.NewEnum[Enum](
+							EnumValue1,
+							EnumValue2,
+						),
 					),
 			},
 		)
@@ -64,6 +79,8 @@ func Test_openapi_substitution(t *testing.T) {
 	}
 
 	bytes, _ := io.ReadAll(resp.Body)
+
+	fmt.Println(string(bytes))
 
 	if !strings.Contains(string(bytes), "show_field1") {
 		t.Errorf("GET test/v1/openAPI.yaml = %v; want %v", string(bytes), "show_field1")

@@ -16,6 +16,7 @@ type OpenAPI struct {
 	substitutions map[string]*object
 	servers       []string
 	description   string
+	enums         map[string][]string
 }
 
 func NewOpenAPI() OpenAPI {
@@ -31,6 +32,20 @@ func NewTypeSubstitution[fromT any, toT any]() (ts typeSubstitution) {
 	ts.to = objectFromType(reflect.TypeOf(new(toT)))
 	ts.to.Name = ts.from.Name // keep the name
 	ts.to.ID = ts.from.ID     // keep the ID
+	return
+}
+
+type enum struct {
+	object *object
+	values []string
+}
+
+func NewEnum[T ~string](values ...T) (e enum) {
+	e.object = objectFromType(reflect.TypeOf(new(T)))
+	e.values = make([]string, len(values))
+	for i, v := range values {
+		e.values[i] = string(v)
+	}
 	return
 }
 
@@ -50,6 +65,16 @@ func (o OpenAPI) WithTypeSubstitutions(subs ...typeSubstitution) OpenAPI {
 	}
 	for _, sub := range subs {
 		o.substitutions[sub.from.ID] = sub.to
+	}
+	return o
+}
+
+func (o OpenAPI) WithEnums(enums ...enum) OpenAPI {
+	if o.enums == nil {
+		o.enums = make(map[string][]string)
+	}
+	for _, e := range enums {
+		o.enums[e.object.ID] = e.values
 	}
 	return o
 }
@@ -133,17 +158,18 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 	var uniqueNames = make(map[string]int)
 	var knownNames = make(map[string]string)
 	uniqueName := func(o object) string {
-		if name, op := knownNames[o.ID]; op {
+		if name, ok := knownNames[o.ID]; ok {
 			return name
 		}
 		name := snakeName(o.Name)
-		if _, ok := uniqueNames[name]; !ok {
+		if _, ok := uniqueNames[name]; ok {
+			uniqueNames[name]++
+			name = fmt.Sprintf("%s_%d", name, uniqueNames[name])
+		} else {
 			uniqueNames[name] = 0
-			knownNames[o.ID] = name
-			return name
 		}
-		uniqueNames[name]++
-		return fmt.Sprintf("%s_%d", name, uniqueNames[name])
+		knownNames[o.ID] = name
+		return name
 	}
 
 	sb := strings.Builder{}
@@ -198,6 +224,16 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 						required = append(required, name)
 					} else {
 						sb.WriteString("          nullable: true\n")
+					}
+					if x.enums != nil {
+						if values, ok := x.enums[obj.ID]; ok {
+							if len(values) > 0 {
+								sb.WriteString("          enum:\n")
+								for _, value := range values {
+									sb.WriteString(fmt.Sprintf("            - %s\n", value))
+								}
+							}
+						}
 					}
 				}
 				if len(required) > 0 {
