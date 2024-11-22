@@ -147,7 +147,7 @@ func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
 	o.ID = t.PkgPath() + "/" + o.Name
 
 	for _, known := range knownObjects {
-		if known.Name == o.Name {
+		if known.ID == o.ID {
 			return known
 		}
 	}

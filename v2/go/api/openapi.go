@@ -10,9 +10,48 @@ import (
 )
 
 type OpenAPI struct {
-	descriptor descriptor
-	endpoints  endpoints
-	yaml       string
+	descriptor    descriptor
+	endpoints     endpoints
+	yaml          string
+	substitutions map[string]*object
+	servers       []string
+	description   string
+}
+
+func NewOpenAPI() OpenAPI {
+	return OpenAPI{}
+}
+
+type typeSubstitution struct {
+	from, to *object
+}
+
+func NewTypeSubstitution[fromT any, toT any]() (ts typeSubstitution) {
+	ts.from = objectFromType(reflect.TypeOf(new(fromT)))
+	ts.to = objectFromType(reflect.TypeOf(new(toT)))
+	ts.to.Name = ts.from.Name // keep the name
+	ts.to.ID = ts.from.ID     // keep the ID
+	return
+}
+
+func (o OpenAPI) WithDescription(desc string) OpenAPI {
+	o.description = desc
+	return o
+}
+
+func (o OpenAPI) WithServers(svs ...string) OpenAPI {
+	o.servers = append(o.servers, svs...)
+	return o
+}
+
+func (o OpenAPI) WithTypeSubstitutions(subs ...typeSubstitution) OpenAPI {
+	if o.substitutions == nil {
+		o.substitutions = make(map[string]*object)
+	}
+	for _, sub := range subs {
+		o.substitutions[sub.from.ID] = sub.to
+	}
+	return o
 }
 
 func populateSchemas(res map[string]object, o *object) {
@@ -59,6 +98,19 @@ func snakeName(name string) string {
 	return strings.ToLower(sb.String())
 }
 
+func (x *OpenAPI) objOrSub(o *object) *object {
+	if o == nil {
+		return nil
+	}
+	if x.substitutions == nil {
+		return o
+	}
+	if sub, ok := x.substitutions[o.ID]; ok {
+		return sub
+	}
+	return o
+}
+
 func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *http.Request) bool {
 	_, match := x.descriptor.match(r)
 	if !match {
@@ -74,8 +126,8 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 	schemas := make(map[string]object)
 	for _, ep := range x.endpoints {
 		desc := ep.getDescriptor()
-		populateSchemas(schemas, desc.in)
-		populateSchemas(schemas, desc.out)
+		populateSchemas(schemas, x.objOrSub(desc.in))
+		populateSchemas(schemas, x.objOrSub(desc.out))
 	}
 
 	var uniqueNames = make(map[string]int)
@@ -100,6 +152,15 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 	sb.WriteString("info:\n")
 	sb.WriteString("  title: API\n")
 	sb.WriteString("  version: 1.0.0\n")
+	if x.description != "" {
+		sb.WriteString(fmt.Sprintf("  description: %s\n", x.description))
+	}
+	if len(x.servers) > 0 {
+		sb.WriteString("servers:\n")
+		for _, sv := range x.servers {
+			sb.WriteString(fmt.Sprintf("  - url: %s\n", sv))
+		}
+	}
 	sb.WriteString("components:\n")
 	sb.WriteString("  schemas:\n")
 	for _, schema := range schemas {
@@ -122,9 +183,11 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 			}
 		case objectTypeObject:
 			if len(schema.Fields) > 0 {
+				required := make([]string, 0, len(schema.Fields))
 				sb.WriteString("      properties:\n")
 				for name, obj := range schema.Fields {
-					sb.WriteString(fmt.Sprintf("        %s:\n", snakeName(name)))
+					name = snakeName(name)
+					sb.WriteString(fmt.Sprintf("        %s:\n", name))
 					if obj.Type.IsSimple() {
 						sb.WriteString(fmt.Sprintf("          type: %s\n", obj.Type))
 					} else {
@@ -132,8 +195,15 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 					}
 					if obj.Mandatory {
 						sb.WriteString("          nullable: false\n")
+						required = append(required, name)
 					} else {
 						sb.WriteString("          nullable: true\n")
+					}
+				}
+				if len(required) > 0 {
+					sb.WriteString("      required:\n")
+					for _, name := range required {
+						sb.WriteString(fmt.Sprintf("        - %s\n", name))
 					}
 				}
 			}
@@ -170,7 +240,7 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 				sb.WriteString("        content:\n")
 				sb.WriteString("          application/json:\n")
 				sb.WriteString("            schema:\n")
-				sb.WriteString(fmt.Sprintf("              $ref: '#/components/schemas/%s'\n", snakeName(desc.in.Name)))
+				sb.WriteString(fmt.Sprintf("              $ref: '#/components/schemas/%s'\n", snakeName(x.objOrSub(desc.in).Name)))
 			}
 			sb.WriteString("      responses:\n")
 			sb.WriteString("        '200':\n")
@@ -179,7 +249,7 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 				sb.WriteString("          content:\n")
 				sb.WriteString("            application/json:\n")
 				sb.WriteString("              schema:\n")
-				sb.WriteString(fmt.Sprintf("                $ref: '#/components/schemas/%s'\n", snakeName(desc.out.Name)))
+				sb.WriteString(fmt.Sprintf("                $ref: '#/components/schemas/%s'\n", snakeName(x.objOrSub(desc.out).Name)))
 			}
 		}
 	}

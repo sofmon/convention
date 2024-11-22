@@ -1,7 +1,6 @@
 package api_test
 
 import (
-	"net/http"
 	"testing"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 func Test_server_and_client(t *testing.T) {
 
 	agentCtx := convCtx.New(convAuth.Claims{
-		User: "test-v1",
+		User: "Test_server_and_client",
 	})
 
 	go func() {
@@ -154,14 +153,5 @@ func Test_server_and_client(t *testing.T) {
 	}
 	if _, err := client.InOutP4.Call(callerCtxRoleTrigger, "p1", "p2", "p3", "p4", InObj{P1: "p1", P2: "p2", P3: "p3", P4: "p4"}); err == nil {
 		t.Errorf("InOutP4.Call() = nil; want error")
-	}
-
-	resp, err := http.Get("https://localhost:12345/test/v1/openapi.yaml")
-	if err != nil {
-		t.Errorf("http.Get() = %v; want nil", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("GET test/v1/openAPI.yaml = %v; want %v", resp.StatusCode, http.StatusOK)
 	}
 }

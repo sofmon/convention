@@ -11,6 +11,8 @@ import (
 	convCtx "github.com/sofmon/convention/v2/go/ctx"
 )
 
+var srv http.Server
+
 func ListenAndServe(ctx convCtx.Context, host string, port int, cfg convAuth.Config, svc any) (err error) {
 
 	if port == 0 {
@@ -22,12 +24,20 @@ func ListenAndServe(ctx convCtx.Context, host string, port int, cfg convAuth.Con
 		return
 	}
 
-	return http.ListenAndServeTLS(
-		fmt.Sprintf("%s:%d", host, port),              // following convention/v1
+	srv = http.Server{
+		Addr:    fmt.Sprintf("%s:%d", host, port),
+		Handler: NewHandler(ctx, host, port, check, svc),
+	}
+
+	return srv.ListenAndServeTLS(
 		convCfg.FilePath("communication_certificate"), // following convention/v1
 		convCfg.FilePath("communication_key"),         // following convention/v1
-		NewHandler(ctx, host, port, check, svc),
 	)
+
+}
+
+func Shutdown(ctx convCtx.Context) (err error) {
+	return srv.Shutdown(ctx)
 }
 
 func NewHandler(ctx convCtx.Context, host string, port int, check convAuth.Check, svc any) http.Handler {
