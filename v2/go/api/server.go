@@ -11,9 +11,11 @@ import (
 	convCtx "github.com/sofmon/convention/v2/go/ctx"
 )
 
-var srv http.Server
+type server struct {
+	httpServer *http.Server
+}
 
-func ListenAndServe(ctx convCtx.Context, host string, port int, cfg convAuth.Config, svc any) (err error) {
+func NewServer(ctx convCtx.Context, host string, port int, cfg convAuth.Config, svc any) (srv *server, err error) {
 
 	if port == 0 {
 		port = 443
@@ -24,20 +26,25 @@ func ListenAndServe(ctx convCtx.Context, host string, port int, cfg convAuth.Con
 		return
 	}
 
-	srv = http.Server{
-		Addr:    fmt.Sprintf("%s:%d", host, port),
-		Handler: NewHandler(ctx, host, port, check, svc),
+	srv = &server{
+		&http.Server{
+			Addr:    fmt.Sprintf("%s:%d", host, port),
+			Handler: NewHandler(ctx, host, port, check, svc),
+		},
 	}
 
-	return srv.ListenAndServeTLS(
+	return
+}
+
+func (srv *server) ListenAndServe() (err error) {
+	return srv.httpServer.ListenAndServeTLS(
 		convCfg.FilePath("communication_certificate"), // following convention/v1
 		convCfg.FilePath("communication_key"),         // following convention/v1
 	)
-
 }
 
-func Shutdown(ctx convCtx.Context) (err error) {
-	return srv.Shutdown(ctx)
+func (srv *server) Shutdown(ctx convCtx.Context) (err error) {
+	return srv.httpServer.Shutdown(ctx)
 }
 
 func NewHandler(ctx convCtx.Context, host string, port int, check convAuth.Check, svc any) http.Handler {

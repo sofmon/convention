@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sort"
 	"strings"
 
 	convCtx "github.com/sofmon/convention/v2/go/ctx"
@@ -84,11 +85,11 @@ func populateSchemas(res map[string]object, o *object) {
 		return
 	}
 
-	if _, ok := res[o.Name]; ok {
+	if _, ok := res[o.ID]; ok {
 		return
 	}
 
-	res[o.Name] = *o
+	res[o.ID] = *o
 
 	populateSchemas(res, o.Key)
 	populateSchemas(res, o.Elem)
@@ -96,31 +97,6 @@ func populateSchemas(res map[string]object, o *object) {
 	for _, oo := range o.Fields {
 		populateSchemas(res, oo)
 	}
-}
-
-func snakeName(name string) string {
-	name = strings.Replace(name, "[]", "list_of_", 1)                               // handle array and slice
-	name = strings.ReplaceAll(strings.ReplaceAll(name, "map[", "map_of_"), "]", "") // handle map
-	sb := strings.Builder{}
-	wasCapital := false
-	for i, r := range name {
-		isCapital := 'A' <= r && r <= 'Z'
-		isNumber := '0' <= r && r <= '9'
-		isLetter := ('a' <= r && r <= 'z') || r == '_' || isCapital
-		isAllowed := isNumber || isLetter
-		if !isAllowed {
-			continue
-		}
-		if i == 0 {
-			wasCapital = isCapital
-		}
-		if isCapital && !wasCapital {
-			sb.WriteRune('_')
-		}
-		sb.WriteRune(r)
-		wasCapital = isCapital
-	}
-	return strings.ToLower(sb.String())
 }
 
 func (x *OpenAPI) objOrSub(o *object) *object {
@@ -161,7 +137,7 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 		if name, ok := knownNames[o.ID]; ok {
 			return name
 		}
-		name := snakeName(o.Name)
+		name := o.Name
 		if _, ok := uniqueNames[name]; ok {
 			uniqueNames[name]++
 			name = fmt.Sprintf("%s_%d", name, uniqueNames[name])
@@ -187,65 +163,81 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 			sb.WriteString(fmt.Sprintf("  - url: %s\n", sv))
 		}
 	}
-	sb.WriteString("components:\n")
-	sb.WriteString("  schemas:\n")
-	for _, schema := range schemas {
-		sb.WriteString(fmt.Sprintf("    %s:\n", uniqueName(schema)))
-		sb.WriteString(fmt.Sprintf("      type: %s\n", schema.Type))
-		switch schema.Type {
-		case objectTypeArray:
-			sb.WriteString("      items:\n")
-			if schema.Elem.Type.IsSimple() {
-				sb.WriteString(fmt.Sprintf("        type: %s\n", schema.Elem.Type))
-			} else {
-				sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", uniqueName(*schema.Elem)))
-			}
-		case objectTypeMap:
-			sb.WriteString("      additionalProperties:\n")
-			if schema.Elem.Type.IsSimple() {
-				sb.WriteString(fmt.Sprintf("        type: %s\n", schema.Elem.Type))
-			} else {
-				sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", uniqueName(*schema.Elem)))
-			}
-		case objectTypeObject:
-			if len(schema.Fields) > 0 {
-				required := make([]string, 0, len(schema.Fields))
-				sb.WriteString("      properties:\n")
-				for name, obj := range schema.Fields {
-					name = snakeName(name)
-					sb.WriteString(fmt.Sprintf("        %s:\n", name))
-					if obj.Type.IsSimple() {
-						sb.WriteString(fmt.Sprintf("          type: %s\n", obj.Type))
-					} else {
-						sb.WriteString(fmt.Sprintf("          $ref: '#/components/schemas/%s'\n", uniqueName(*obj)))
+	if len(schemas) > 0 {
+		sb.WriteString("components:\n")
+		sb.WriteString("  schemas:\n")
+
+		sortedSchemas := make([]object, 0, len(schemas))
+		for _, schema := range schemas {
+			sortedSchemas = append(sortedSchemas, schema)
+		}
+		sort.Slice(sortedSchemas, func(i, j int) bool {
+			return sortedSchemas[i].Name < sortedSchemas[j].Name
+		})
+
+		for _, schema := range sortedSchemas {
+			sb.WriteString(fmt.Sprintf("    %s:\n", uniqueName(schema)))
+			sb.WriteString(fmt.Sprintf("      type: %s\n", schema.Type))
+			switch schema.Type {
+			case objectTypeArray:
+				sb.WriteString("      items:\n")
+				if schema.Elem.Type.IsSimple() {
+					sb.WriteString(fmt.Sprintf("        type: %s\n", schema.Elem.Type))
+				} else {
+					sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", uniqueName(schema)))
+				}
+			case objectTypeMap:
+				sb.WriteString("      additionalProperties:\n")
+				if schema.Elem.Type.IsSimple() {
+					sb.WriteString(fmt.Sprintf("        type: %s\n", schema.Elem.Type))
+				} else {
+					sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", uniqueName(schema)))
+				}
+			case objectTypeObject:
+				if len(schema.Fields) > 0 {
+					required := make([]string, 0, len(schema.Fields))
+					sb.WriteString("      properties:\n")
+					sortedFields := make([]string, 0, len(schema.Fields))
+					for name := range schema.Fields {
+						sortedFields = append(sortedFields, name)
 					}
-					if obj.Mandatory {
-						sb.WriteString("          nullable: false\n")
-						required = append(required, name)
-					} else {
-						sb.WriteString("          nullable: true\n")
-					}
-					if x.enums != nil {
-						if values, ok := x.enums[obj.ID]; ok {
-							if len(values) > 0 {
-								sb.WriteString("          enum:\n")
-								for _, value := range values {
-									sb.WriteString(fmt.Sprintf("            - %s\n", value))
+					sort.Strings(sortedFields)
+					for _, name := range sortedFields {
+						obj := schema.Fields[name]
+						name = snakeName(name)
+						sb.WriteString(fmt.Sprintf("        %s:\n", name))
+						if obj.Type.IsSimple() {
+							sb.WriteString(fmt.Sprintf("          type: %s\n", obj.Type))
+						} else {
+							sb.WriteString(fmt.Sprintf("          $ref: '#/components/schemas/%s'\n", uniqueName(*obj)))
+						}
+						if obj.Mandatory {
+							sb.WriteString("          nullable: false\n")
+							required = append(required, name)
+						} else {
+							sb.WriteString("          nullable: true\n")
+						}
+						if x.enums != nil {
+							if values, ok := x.enums[obj.ID]; ok {
+								if len(values) > 0 {
+									sb.WriteString("          enum:\n")
+									for _, value := range values {
+										sb.WriteString(fmt.Sprintf("            - %s\n", value))
+									}
 								}
 							}
 						}
 					}
-				}
-				if len(required) > 0 {
-					sb.WriteString("      required:\n")
-					for _, name := range required {
-						sb.WriteString(fmt.Sprintf("        - %s\n", name))
+					if len(required) > 0 {
+						sb.WriteString("      required:\n")
+						for _, name := range required {
+							sb.WriteString(fmt.Sprintf("        - %s\n", name))
+						}
 					}
 				}
 			}
 		}
 	}
-
 	epByPath := make(map[string]endpoints)
 	for _, ep := range x.endpoints {
 		desc := ep.getDescriptor()
@@ -253,8 +245,15 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 		epByPath[path] = append(epByPath[path], ep)
 	}
 
+	sortedPaths := make([]string, 0, len(epByPath))
+	for path := range epByPath {
+		sortedPaths = append(sortedPaths, path)
+	}
+	sort.Strings(sortedPaths)
+
 	sb.WriteString("paths:\n")
-	for path, eps := range epByPath {
+	for _, path := range sortedPaths {
+		eps := epByPath[path]
 		sb.WriteString(fmt.Sprintf("  %s:\n", path))
 		desc := eps[0].getDescriptor()
 		params := desc.parameters()

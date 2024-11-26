@@ -121,12 +121,43 @@ type object struct {
 	Fields    map[string]*object `json:"fields"`
 }
 
-// Remove package name from a fully qualified type name
-func removePrefixBeforeDot(s string) string {
-	if dotIndex := strings.LastIndex(s, "."); dotIndex != -1 {
-		return s[dotIndex+1:]
+func snakeName(name string) string {
+	sb := strings.Builder{}
+	wasCapital := false
+	for i, r := range name {
+		isCapital := 'A' <= r && r <= 'Z'
+		isNumber := '0' <= r && r <= '9'
+		isLetter := ('a' <= r && r <= 'z') || r == '_' || isCapital
+		isAllowed := isNumber || isLetter
+		if !isAllowed {
+			continue
+		}
+		if i == 0 {
+			wasCapital = isCapital
+		}
+		if isCapital && !wasCapital {
+			sb.WriteRune('_')
+		}
+		sb.WriteRune(r)
+		wasCapital = isCapital
 	}
-	return s // No package name found
+	return strings.ToLower(sb.String())
+}
+
+// Remove package name from a fully qualified type name
+func friendlyName(t reflect.Type) string {
+	switch t.Kind() {
+	case reflect.Array, reflect.Slice:
+		return "list_of_" + friendlyName(t.Elem())
+	case reflect.Map:
+		return "map_by_" + friendlyName(t.Key()) + "_of_" + friendlyName(t.Elem())
+	default:
+		name := t.String()
+		if dotIndex := strings.LastIndex(name, "."); dotIndex != -1 {
+			name = name[dotIndex+1:]
+		}
+		return snakeName(name)
+	}
 }
 
 func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
@@ -143,7 +174,7 @@ func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
 		t = t.Elem() // Dereference if it's a pointer
 	}
 
-	o.Name = removePrefixBeforeDot(t.String())
+	o.Name = friendlyName(t)
 	o.ID = t.PkgPath() + "/" + o.Name
 
 	for _, known := range knownObjects {
