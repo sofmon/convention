@@ -15,9 +15,9 @@ type allowedRoles map[Role]allowedActions
 type allowedActions []allowedAction
 
 type allowedAction struct {
-	method          string
-	path            allowedPath
-	ignorePathAfter int
+	method  string
+	path    allowedPath
+	openEnd bool
 }
 
 func expandConfig(cfg Config) (allowed allowedRoles, publicActions allowedActions, err error) {
@@ -117,11 +117,9 @@ func generateAllowedAction(a Action) (res allowedAction, err error) {
 
 	segments := strings.Split(path, "/")
 
-	ignorePathAfter := -1
-	pathIsOpenEnded := strings.HasSuffix(path, "/{any...}")
-	if pathIsOpenEnded {
+	openEnd := strings.HasSuffix(path, "/{any...}")
+	if openEnd {
 		segments = segments[:len(segments)-1]
-		ignorePathAfter = len(segments)
 	}
 
 	allowedPath := make(allowedPath, len(segments))
@@ -141,7 +139,7 @@ func generateAllowedAction(a Action) (res allowedAction, err error) {
 		}
 	}
 
-	res = allowedAction{method, allowedPath, ignorePathAfter}
+	res = allowedAction{method, allowedPath, openEnd}
 
 	return
 }
@@ -176,8 +174,11 @@ func (a allowedAction) match(method string, segments []string, claims Claims) bo
 		return false
 	}
 
-	if a.ignorePathAfter >= 0 {
-		return a.path.match(segments[:a.ignorePathAfter], claims)
+	if a.openEnd {
+		if len(a.path) > len(segments) {
+			return false
+		}
+		return a.path.match(segments[:len(a.path)], claims)
 	} else {
 		return a.path.match(segments, claims)
 	}
