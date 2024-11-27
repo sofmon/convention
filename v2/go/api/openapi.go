@@ -212,10 +212,7 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 							sb.WriteString(fmt.Sprintf("          $ref: '#/components/schemas/%s'\n", uniqueName(*obj)))
 						}
 						if obj.Mandatory {
-							sb.WriteString("          nullable: false\n")
 							required = append(required, name)
-						} else {
-							sb.WriteString("          nullable: true\n")
 						}
 						if x.enums != nil {
 							if values, ok := x.enums[obj.ID]; ok {

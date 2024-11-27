@@ -98,46 +98,32 @@ components:
 			properties:
 				bool_field:
 					type: boolean
-					nullable: false
 				float32_field:
 					type: number
-					nullable: false
 				float64_field:
 					type: number
-					nullable: false
 				int16_field:
 					type: integer
-					nullable: false
 				int32_field:
 					type: integer
-					nullable: false
 				int64_field:
 					type: integer
-					nullable: false
 				int8_field:
 					type: integer
-					nullable: false
 				int_field:
 					type: integer
-					nullable: false
 				string_field:
 					type: string
-					nullable: false
 				uint16_field:
 					type: integer
-					nullable: false
 				uint32_field:
 					type: integer
-					nullable: false
 				uint64_field:
 					type: integer
-					nullable: false
 				uint8_field:
 					type: integer
-					nullable: false
 				uint_field:
 					type: integer
-					nullable: false
 			required:
 				- bool_field
 				- float32_field
@@ -214,7 +200,6 @@ components:
 			properties:
 				enum_field:
 					type: string
-					nullable: false
 					enum:
 						- enum_value_1
 						- enum_value_2
@@ -275,7 +260,6 @@ components:
 			properties:
 				substitution_object_field:
 					type: integer
-					nullable: false
 			required:
 				- substitution_object_field
 paths:
@@ -324,7 +308,6 @@ components:
 			properties:
 				recursive_object_field:
 					$ref: '#/components/schemas/recursive_object'
-					nullable: true
 paths:
 	/test/v1/openapi.yaml:
 		get:
@@ -477,7 +460,6 @@ components:
 			properties:
 				int_field:
 					type: integer
-					nullable: false
 			required:
 				- int_field
 paths:
