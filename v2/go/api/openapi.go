@@ -231,6 +231,7 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 						}
 					}
 					if len(required) > 0 {
+						sort.Strings(required)
 						sb.WriteString("      required:\n")
 						for _, name := range required {
 							sb.WriteString(fmt.Sprintf("        - %s\n", name))
