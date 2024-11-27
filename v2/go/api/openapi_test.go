@@ -512,7 +512,7 @@ components:
 		list_of_object:
 			type: array
 			items:
-				$ref: '#/components/schemas/list_of_object'
+				$ref: '#/components/schemas/object'
 		object:
 			type: object
 			properties:

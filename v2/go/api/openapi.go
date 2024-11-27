@@ -184,7 +184,7 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 				if schema.Elem.Type.IsSimple() {
 					sb.WriteString(fmt.Sprintf("        type: %s\n", schema.Elem.Type))
 				} else {
-					sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", uniqueName(schema)))
+					sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", uniqueName(*schema.Elem)))
 				}
 			case objectTypeMap:
 				sb.WriteString(fmt.Sprintf("      type: %s\n", schema.Type))
@@ -192,7 +192,7 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 				if schema.Elem.Type.IsSimple() {
 					sb.WriteString(fmt.Sprintf("        type: %s\n", schema.Elem.Type))
 				} else {
-					sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", uniqueName(schema)))
+					sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", uniqueName(*schema.Elem)))
 				}
 			case objectTypeTime:
 				sb.WriteString("      type: string\n")
