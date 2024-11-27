@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
-	"time"
 
 	convAuth "github.com/sofmon/convention/v2/go/auth"
 )
@@ -15,13 +14,6 @@ import (
 type Key[idT, shardKeyT ~string] struct {
 	ID       idT
 	ShardKey shardKeyT
-}
-
-type Metadata struct {
-	CreatedAt time.Time
-	CreatedBy convAuth.User
-	UpdatedAt time.Time
-	UpdatedBy convAuth.User
 }
 
 type Object[idT, shardKeyT ~string] interface {
