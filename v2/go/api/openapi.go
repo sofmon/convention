@@ -80,7 +80,7 @@ func (o OpenAPI) WithEnums(enums ...enum) OpenAPI {
 	return o
 }
 
-func populateSchemas(res map[string]object, o *object) {
+func (x *OpenAPI) populateSchemas(res map[string]object, o *object) {
 	if o == nil || o.Type.IsSimple() {
 		return
 	}
@@ -91,11 +91,11 @@ func populateSchemas(res map[string]object, o *object) {
 
 	res[o.ID] = *o
 
-	populateSchemas(res, o.Key)
-	populateSchemas(res, o.Elem)
+	x.populateSchemas(res, x.objOrSub(o.Key))
+	x.populateSchemas(res, x.objOrSub(o.Elem))
 
 	for _, oo := range o.Fields {
-		populateSchemas(res, oo)
+		x.populateSchemas(res, x.objOrSub(oo))
 	}
 }
 
@@ -127,8 +127,8 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 	schemas := make(map[string]object)
 	for _, ep := range x.endpoints {
 		desc := ep.getDescriptor()
-		populateSchemas(schemas, x.objOrSub(desc.in))
-		populateSchemas(schemas, x.objOrSub(desc.out))
+		x.populateSchemas(schemas, x.objOrSub(desc.in))
+		x.populateSchemas(schemas, x.objOrSub(desc.out))
 	}
 
 	var uniqueNames = make(map[string]int)
@@ -177,9 +177,9 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 
 		for _, schema := range sortedSchemas {
 			sb.WriteString(fmt.Sprintf("    %s:\n", uniqueName(schema)))
-			sb.WriteString(fmt.Sprintf("      type: %s\n", schema.Type))
 			switch schema.Type {
 			case objectTypeArray:
+				sb.WriteString(fmt.Sprintf("      type: %s\n", schema.Type))
 				sb.WriteString("      items:\n")
 				if schema.Elem.Type.IsSimple() {
 					sb.WriteString(fmt.Sprintf("        type: %s\n", schema.Elem.Type))
@@ -187,13 +187,18 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 					sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", uniqueName(schema)))
 				}
 			case objectTypeMap:
+				sb.WriteString(fmt.Sprintf("      type: %s\n", schema.Type))
 				sb.WriteString("      additionalProperties:\n")
 				if schema.Elem.Type.IsSimple() {
 					sb.WriteString(fmt.Sprintf("        type: %s\n", schema.Elem.Type))
 				} else {
 					sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", uniqueName(schema)))
 				}
+			case objectTypeTime:
+				sb.WriteString("      type: string\n")
+				sb.WriteString("      format: date-time\n")
 			case objectTypeObject:
+				sb.WriteString(fmt.Sprintf("      type: %s\n", schema.Type))
 				if len(schema.Fields) > 0 {
 					required := make([]string, 0, len(schema.Fields))
 					sb.WriteString("      properties:\n")

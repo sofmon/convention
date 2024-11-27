@@ -285,6 +285,64 @@ paths:
 	)
 }
 
+func Test_openapi_substitution_anonymous(t *testing.T) {
+
+	type ComplexMarshallObject struct {
+		ComplexMarshallObjectField int
+	}
+
+	checkOpenAPI(
+		t,
+		&struct {
+			GetOpenAPI                convAPI.OpenAPI                                             `api:"GET /test/v1/openapi.yaml"`
+			PostComplexMarshallObject convAPI.InOut[ComplexMarshallObject, ComplexMarshallObject] `api:"POST /test/v1/complex_marshall_object"`
+		}{
+			GetOpenAPI: convAPI.NewOpenAPI().
+				WithTypeSubstitutions(
+					convAPI.NewTypeSubstitution[
+						ComplexMarshallObject,
+						struct {
+							SubstitutionObjectField int
+						},
+					](),
+				),
+		},
+		`openapi: 3.0.0
+info:
+	title: API
+	version: 1.0.0
+components:
+	schemas:
+		complex_marshall_object:
+			type: object
+			properties:
+				substitution_object_field:
+					type: integer
+			required:
+				- substitution_object_field
+paths:
+	/test/v1/complex_marshall_object:
+		post:
+			requestBody:
+				content:
+					application/json:
+						schema:
+							$ref: '#/components/schemas/complex_marshall_object'
+			responses:
+				'200':
+					description: OK
+					content:
+						application/json:
+							schema:
+								$ref: '#/components/schemas/complex_marshall_object'
+	/test/v1/openapi.yaml:
+		get:
+			responses:
+				'200':
+					description: OK`,
+	)
+}
+
 func Test_openapi_recursive(t *testing.T) {
 
 	type RecursiveObject struct {

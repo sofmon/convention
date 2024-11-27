@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"time"
 )
 
 func newDescriptor(host string, port int, pattern string, in, out reflect.Type) (desc descriptor) {
@@ -109,6 +110,7 @@ const (
 	objectTypeMap     objectType = "map"
 	objectTypeObject  objectType = "object"
 	objectTypeInvalid objectType = "invalid"
+	objectTypeTime    objectType = "time"
 )
 
 type object struct {
@@ -209,24 +211,30 @@ func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
 		o.Key, o.Elem = objectFromType(t.Key(), knownObjects...), objectFromType(t.Elem(), knownObjects...)
 
 	case reflect.Struct:
-		o.Type = objectTypeObject
-		o.Fields = make(map[string]*object)
-		for i := 0; i < t.NumField(); i++ {
-			field := t.Field(i)
-			if field.PkgPath != "" {
-				continue // Skip unexported fields
+
+		switch t {
+		case reflect.TypeOf(time.Time{}):
+			o.Type = objectTypeTime
+		default:
+			o.Type = objectTypeObject
+			o.Fields = make(map[string]*object)
+			for i := 0; i < t.NumField(); i++ {
+				field := t.Field(i)
+				if field.PkgPath != "" {
+					continue // Skip unexported fields
+				}
+				jsonTag := field.Tag.Get("json")
+				if jsonTag == "-" {
+					continue // Skip fields with json tag "-"
+				}
+				if jsonTag != "" {
+					jsonTag = strings.Split(jsonTag, ",")[0]
+				}
+				if jsonTag == "" {
+					jsonTag = field.Name
+				}
+				o.Fields[jsonTag] = objectFromType(field.Type, knownObjects...)
 			}
-			jsonTag := field.Tag.Get("json")
-			if jsonTag == "-" {
-				continue // Skip fields with json tag "-"
-			}
-			if jsonTag != "" {
-				jsonTag = strings.Split(jsonTag, ",")[0]
-			}
-			if jsonTag == "" {
-				jsonTag = field.Name
-			}
-			o.Fields[jsonTag] = objectFromType(field.Type, knownObjects...)
 		}
 
 	case reflect.Invalid, reflect.Uintptr, reflect.Complex64, reflect.Complex128,
