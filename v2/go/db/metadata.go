@@ -9,10 +9,10 @@ import (
 )
 
 type Metadata struct {
-	CreatedAt time.Time
-	CreatedBy convAuth.User
-	UpdatedAt time.Time
-	UpdatedBy convAuth.User
+	CreatedAt time.Time     `json:"created_at"`
+	CreatedBy convAuth.User `json:"created_by"`
+	UpdatedAt time.Time     `json:"updated_at"`
+	UpdatedBy convAuth.User `json:"updated_by"`
 }
 
 func (tos TenantObjectSet[objT, idT, shardKeyT]) Metadata(ctx convCtx.Context, id idT, shardKeys ...shardKeyT) (res *Metadata, err error) {
