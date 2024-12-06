@@ -170,9 +170,9 @@ func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
 
 	o = &object{}
 
-	o.Mandatory = t.Kind() != reflect.Pointer
+	isPointer := t.Kind() == reflect.Ptr
 
-	if !o.Mandatory {
+	if isPointer {
 		t = t.Elem() // Dereference if it's a pointer
 	}
 
@@ -190,27 +190,34 @@ func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
 	switch t.Kind() {
 
 	case reflect.Bool:
+		o.Mandatory = !isPointer
 		o.Type = objectTypeBoolean
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		o.Mandatory = !isPointer
 		o.Type = objectTypeInteger
 
 	case reflect.Float32, reflect.Float64:
+		o.Mandatory = !isPointer
 		o.Type = objectTypeNumber
 
 	case reflect.String:
+		o.Mandatory = !isPointer
 		o.Type = objectTypeString
 
 	case reflect.Array, reflect.Slice:
+		o.Mandatory = false // Arrays and slices are optional by default
 		o.Type = objectTypeArray
 		o.Elem = objectFromType(t.Elem(), knownObjects...)
 
 	case reflect.Map:
+		o.Mandatory = false // Maps are optional by default
 		o.Type = objectTypeMap
 		o.Key, o.Elem = objectFromType(t.Key(), knownObjects...), objectFromType(t.Elem(), knownObjects...)
 
 	case reflect.Struct:
+		o.Mandatory = !isPointer
 
 		switch t {
 		case reflect.TypeOf(time.Time{}):
