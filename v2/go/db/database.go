@@ -138,6 +138,24 @@ func DBs(vault Vault, tenant convAuth.Tenant) ([]*sql.DB, error) {
 	return tdb, nil
 }
 
+func dbByIndex(vault Vault, tenant convAuth.Tenant, index int) (*sql.DB, error) {
+
+	dbs, err := DBs(vault, tenant)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(dbs) <= 0 {
+		return nil, ErrNoDBTenant
+	}
+
+	if index < 0 || index >= len(dbs) {
+		return nil, errors.New("database index out of range")
+	}
+
+	return dbs[index], nil
+}
+
 func dbByShardKey(vault Vault, tenant convAuth.Tenant, key string) (*sql.DB, error) {
 
 	dbs, err := DBs(vault, tenant)
