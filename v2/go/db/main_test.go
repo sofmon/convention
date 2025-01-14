@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	_ "github.com/mattn/go-sqlite3"
+
 	convCfg "github.com/sofmon/convention/v2/go/cfg"
 	convDB "github.com/sofmon/convention/v2/go/db"
 )

@@ -1,9 +1,6 @@
 package db
 
 import (
-	_ "github.com/lib/pq"
-	_ "github.com/mattn/go-sqlite3"
-
 	"database/sql"
 	"errors"
 	"fmt"
@@ -17,7 +14,7 @@ type Engine string
 
 const (
 	EnginePostgres Engine = "postgres"
-	EngineSqlite   Engine = "sqlite"
+	EngineSqlite3  Engine = "sqlite3"
 
 	configKeyDatabase convCfg.ConfigKey = "database"
 )
@@ -45,7 +42,7 @@ func (conn connection) Open() (*sql.DB, error) {
 				conn.Host, conn.Port, conn.Username, conn.Password, conn.Database,
 			),
 		)
-	case EngineSqlite:
+	case EngineSqlite3:
 		if conn.InMemory {
 			return sql.Open("sqlite3", ":memory:")
 		} else {
@@ -53,7 +50,7 @@ func (conn connection) Open() (*sql.DB, error) {
 			return nil, errors.New("sqlite engine does not support file-based databases")
 		}
 	default:
-		return nil, errors.New(fmt.Sprintf("unsupported engine: %s", conn.Engine))
+		return nil, fmt.Errorf("unsupported engine: %s", conn.Engine)
 	}
 }
 
