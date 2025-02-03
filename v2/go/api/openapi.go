@@ -81,12 +81,22 @@ func (o OpenAPI) WithEnums(enums ...enum) OpenAPI {
 }
 
 func (x *OpenAPI) populateSchemas(res map[string]object, o *object) {
-	if o == nil || o.Type.IsSimple() {
+	if o == nil {
+		return
+	}
+
+	_, isEnum := x.enums[o.ID]
+
+	if o.Type.IsSimple() && !isEnum {
 		return
 	}
 
 	if _, ok := res[o.ID]; ok {
 		return
+	}
+
+	if isEnum {
+		o.Type = objectTypeEnum
 	}
 
 	res[o.ID] = *o
@@ -183,16 +193,6 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 				sb.WriteString("      items:\n")
 				if schema.Elem.Type.IsSimple() {
 					sb.WriteString(fmt.Sprintf("        type: %s\n", schema.Elem.Type))
-					if x.enums != nil {
-						if values, ok := x.enums[schema.Elem.ID]; ok {
-							if len(values) > 0 {
-								sb.WriteString("        enum:\n")
-								for _, value := range values {
-									sb.WriteString(fmt.Sprintf("          - %s\n", value))
-								}
-							}
-						}
-					}
 				} else {
 					sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", uniqueName(*schema.Elem)))
 				}
@@ -207,6 +207,12 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 			case objectTypeTime:
 				sb.WriteString("      type: string\n")
 				sb.WriteString("      format: date-time\n")
+			case objectTypeEnum:
+				sb.WriteString("      type: string\n")
+				sb.WriteString("      enum:\n")
+				for _, value := range x.enums[schema.ID] {
+					sb.WriteString(fmt.Sprintf("        - %s\n", value))
+				}
 			case objectTypeObject:
 				sb.WriteString(fmt.Sprintf("      type: %s\n", schema.Type))
 				if len(schema.Fields) > 0 {
@@ -228,16 +234,6 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 						}
 						if obj.Mandatory {
 							required = append(required, name)
-						}
-						if x.enums != nil {
-							if values, ok := x.enums[obj.ID]; ok {
-								if len(values) > 0 {
-									sb.WriteString("          enum:\n")
-									for _, value := range values {
-										sb.WriteString(fmt.Sprintf("            - %s\n", value))
-									}
-								}
-							}
 						}
 					}
 					if len(required) > 0 {

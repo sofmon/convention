@@ -195,14 +195,16 @@ info:
 	version: 1.0.0
 components:
 	schemas:
+		enum:
+			type: string
+			enum:
+				- enum_value_1
+				- enum_value_2
 		in_object:
 			type: object
 			properties:
 				enum_field:
-					type: string
-					enum:
-						- enum_value_1
-						- enum_value_2
+					$ref: '#/components/schemas/enum'
 			required:
 				- enum_field
 paths:
@@ -562,13 +564,15 @@ info:
 	version: 1.0.0
 components:
 	schemas:
+		enum:
+			type: string
+			enum:
+				- enum_value_1
+				- enum_value_2
 		list_of_enum:
 			type: array
 			items:
-				type: string
-				enum:
-					- enum_value_1
-					- enum_value_2
+				$ref: '#/components/schemas/enum'
 paths:
 	/test/v1/openapi.yaml:
 		get:

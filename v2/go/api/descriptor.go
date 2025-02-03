@@ -111,6 +111,7 @@ const (
 	objectTypeObject  objectType = "object"
 	objectTypeInvalid objectType = "invalid"
 	objectTypeTime    objectType = "time"
+	objectTypeEnum    objectType = "enum"
 )
 
 type object struct {
