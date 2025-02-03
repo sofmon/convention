@@ -183,6 +183,16 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 				sb.WriteString("      items:\n")
 				if schema.Elem.Type.IsSimple() {
 					sb.WriteString(fmt.Sprintf("        type: %s\n", schema.Elem.Type))
+					if x.enums != nil {
+						if values, ok := x.enums[schema.Elem.ID]; ok {
+							if len(values) > 0 {
+								sb.WriteString("        enum:\n")
+								for _, value := range values {
+									sb.WriteString(fmt.Sprintf("          - %s\n", value))
+								}
+							}
+						}
+					}
 				} else {
 					sb.WriteString(fmt.Sprintf("        $ref: '#/components/schemas/%s'\n", uniqueName(*schema.Elem)))
 				}

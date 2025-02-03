@@ -538,6 +538,55 @@ paths:
 	)
 }
 
+func Test_openapi_array_directly_enum(t *testing.T) {
+
+	type Enum string
+
+	const (
+		EnumValue1 Enum = "enum_value_1"
+		EnumValue2 Enum = "enum_value_2"
+	)
+
+	checkOpenAPI(
+		t,
+		&struct {
+			GetOpenAPI convAPI.OpenAPI `api:"GET /test/v1/openapi.yaml"`
+
+			GetSimpleArray convAPI.Out[[]Enum] `api:"GET /test/v1/simple_array"`
+		}{
+			GetOpenAPI: convAPI.NewOpenAPI().WithEnums(convAPI.NewEnum(EnumValue1, EnumValue2)),
+		},
+		`openapi: 3.0.0
+info:
+	title: API
+	version: 1.0.0
+components:
+	schemas:
+		list_of_enum:
+			type: array
+			items:
+				type: string
+				enum:
+					- enum_value_1
+					- enum_value_2
+paths:
+	/test/v1/openapi.yaml:
+		get:
+			responses:
+				'200':
+					description: OK
+	/test/v1/simple_array:
+		get:
+			responses:
+				'200':
+					description: OK
+					content:
+						application/json:
+							schema:
+								$ref: '#/components/schemas/list_of_enum'`,
+	)
+}
+
 func checkOpenAPI(t *testing.T, api any, expectedOpenAPI string) {
 
 	ctx := convCtx.New(convAuth.Claims{
