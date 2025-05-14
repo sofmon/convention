@@ -59,42 +59,17 @@ func dbsForShardKeys[shardKeyT ~string](vault Vault, tenant convAuth.Tenant, sks
 	return dbsByShardKeys(vault, tenant, s...)
 }
 
-func NewObjectSet[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](vault Vault) *ObjectSet[objT, idT, shardKeyT] {
+func NewObjectSet[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](vault Vault, textSearch bool, indexes ...string) ObjectSet[objT, idT, shardKeyT] {
 
 	obj := new(objT)
 	objType := reflect.TypeOf(*obj)
 
-	return &ObjectSet[objT, idT, shardKeyT]{
-		vault:   vault,
-		objType: objType,
+	return ObjectSet[objT, idT, shardKeyT]{
+		vault:      vault,
+		objType:    objType,
+		textSearch: textSearch,
+		indexes:    indexes,
 	}
-}
-
-func (os *ObjectSet[objT, idT, shardKeyT]) WithTextSearch() *ObjectSet[objT, idT, shardKeyT] {
-	if os == nil {
-		panic("cannot use WithTextSearch as the object set is nil")
-	}
-	if os.prepared {
-		panic("cannot use WithTextSearch as the object set is already used")
-	}
-	os.textSearch = true
-	return os
-}
-
-func (os *ObjectSet[objT, idT, shardKeyT]) WithIndexes(indexes ...string) *ObjectSet[objT, idT, shardKeyT] {
-	if os == nil {
-		panic("cannot use WithIndexes as the object set is nil")
-	}
-	if os.prepared {
-		panic("cannot use WithIndexes as the object set is already used")
-	}
-	for _, index := range indexes {
-		if index == textSearchIndex {
-			panic(fmt.Errorf("cannot use '%s' as an index field as it is reserved for text search", textSearchIndex))
-		}
-	}
-	os.indexes = indexes
-	return os
 }
 
 type ObjectSet[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
