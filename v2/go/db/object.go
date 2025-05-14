@@ -59,18 +59,18 @@ func dbsForShardKeys[shardKeyT ~string](vault Vault, tenant convAuth.Tenant, sks
 	return dbsByShardKeys(vault, tenant, s...)
 }
 
-func NewObjectSet[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](vault Vault) ObjectSet[objT, idT, shardKeyT] {
+func NewObjectSet[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](vault Vault) *ObjectSet[objT, idT, shardKeyT] {
 
 	obj := new(objT)
 	objType := reflect.TypeOf(*obj)
 
-	return ObjectSet[objT, idT, shardKeyT]{
+	return &ObjectSet[objT, idT, shardKeyT]{
 		vault:   vault,
 		objType: objType,
 	}
 }
 
-func (os *ObjectSet[objT, idT, shardKeyT]) WithTextSearch() {
+func (os *ObjectSet[objT, idT, shardKeyT]) WithTextSearch() *ObjectSet[objT, idT, shardKeyT] {
 	if os == nil {
 		panic("cannot use WithTextSearch as the object set is nil")
 	}
@@ -78,9 +78,10 @@ func (os *ObjectSet[objT, idT, shardKeyT]) WithTextSearch() {
 		panic("cannot use WithTextSearch as the object set is already used")
 	}
 	os.textSearch = true
+	return os
 }
 
-func (os *ObjectSet[objT, idT, shardKeyT]) WithIndexes(indexes ...string) {
+func (os *ObjectSet[objT, idT, shardKeyT]) WithIndexes(indexes ...string) *ObjectSet[objT, idT, shardKeyT] {
 	if os == nil {
 		panic("cannot use WithIndexes as the object set is nil")
 	}
@@ -93,6 +94,7 @@ func (os *ObjectSet[objT, idT, shardKeyT]) WithIndexes(indexes ...string) {
 		}
 	}
 	os.indexes = indexes
+	return os
 }
 
 type ObjectSet[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
