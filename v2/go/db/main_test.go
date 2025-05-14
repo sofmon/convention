@@ -36,7 +36,7 @@ func generateTestMessages() (res []Message) {
 	return
 }
 
-var messagesDB = convDB.NewObjectSet[Message]("messages", false)
+var messagesDB = convDB.NewObjectSet[Message]("messages")
 
 func TestMain(m *testing.M) {
 

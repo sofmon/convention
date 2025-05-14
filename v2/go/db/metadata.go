@@ -15,6 +15,21 @@ type Metadata struct {
 	UpdatedBy convAuth.User `json:"updated_by"`
 }
 
+type ObjectWithMetadata[T any] struct {
+	Object   T        `json:"object"`
+	Metadata Metadata `json:"metadata"`
+}
+
+type ListWithMetadata[T any] []ObjectWithMetadata[T]
+
+func (lwm ListWithMetadata[T]) Objects() []T {
+	objects := make([]T, len(lwm))
+	for i, lwm := range lwm {
+		objects[i] = lwm.Object
+	}
+	return objects
+}
+
 func (tos TenantObjectSet[objT, idT, shardKeyT]) Metadata(ctx convCtx.Context, id idT, shardKeys ...shardKeyT) (res *Metadata, err error) {
 
 	err = tos.prepare()
@@ -27,13 +42,13 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) Metadata(ctx convCtx.Context, i
 		return
 	}
 
-	var md Metadata
+	res = &Metadata{}
 
 	for _, db := range dbs {
 
 		err = db.
 			QueryRow(`SELECT "created_at","created_by","updated_at","updated_by" FROM "`+tos.table.RuntimeTableName+`" WHERE id=$1`, id).
-			Scan(&md.CreatedAt, &md.CreatedBy, &md.UpdatedAt, &md.UpdatedBy)
+			Scan(&res.CreatedAt, &res.CreatedBy, &res.UpdatedAt, &res.UpdatedBy)
 		if err == sql.ErrNoRows {
 			err = nil
 			continue
@@ -42,7 +57,6 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) Metadata(ctx convCtx.Context, i
 			return
 		}
 
-		res = &md
 		return
 	}
 	return
