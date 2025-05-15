@@ -41,6 +41,7 @@ type whereExpectingOperators interface {
 	LessThanOrEquals() whereExpectingValue
 	In() whereExpectingValues
 	NotIn() whereExpectingValues
+	Like() whereExpectingValue
 }
 
 type whereExpectingLogicalOperator interface {
@@ -170,6 +171,11 @@ func (w *where) LessThanOrEquals() whereExpectingValue {
 		return w
 	}
 	_, w.err = w.query.WriteString(`<=`)
+	return w
+}
+
+func (w *where) Like() whereExpectingValue {
+	_, w.err = w.query.WriteString(` LIKE `)
 	return w
 }
 

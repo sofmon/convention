@@ -78,7 +78,11 @@ func Test_select(t *testing.T) {
 					Noop().
 					Or().
 					UpdatedBy("unknown"),
-			),
+			).
+			And().
+			Key("message_id").
+			Like().
+			Value("%"),
 	)
 	if err != nil {
 		t.Fatalf("Select failed: %v", err)
@@ -157,7 +161,11 @@ func Test_select_with_metadata(t *testing.T) {
 					Noop().
 					Or().
 					UpdatedBy("unknown"),
-			),
+			).
+			And().
+			Key("message_id").
+			Like().
+			Value("%"),
 	)
 	if err != nil {
 		t.Fatalf("Select failed: %v", err)
