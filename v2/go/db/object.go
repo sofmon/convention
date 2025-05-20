@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	convAuth "github.com/sofmon/convention/v2/go/auth"
+	convCtx "github.com/sofmon/convention/v2/go/ctx"
 )
 
 type Key[idT, shardKeyT ~string] struct {
@@ -59,29 +60,58 @@ func dbsForShardKeys[shardKeyT ~string](vault Vault, tenant convAuth.Tenant, sks
 	return dbsByShardKeys(vault, tenant, s...)
 }
 
-func NewObjectSet[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](vault Vault, textSearch bool, indexes ...string) ObjectSet[objT, idT, shardKeyT] {
+func NewObjectSet[objT Object[idT, shardKeyT], idT ~string, shardKeyT ~string](vault Vault) ObjectSetSetup[objT, idT, shardKeyT] {
 
 	obj := new(objT)
 	objType := reflect.TypeOf(*obj)
 
-	return ObjectSet[objT, idT, shardKeyT]{
-		vault:      vault,
-		objType:    objType,
-		textSearch: textSearch,
-		indexes:    indexes,
+	return &objectSet[objT, idT, shardKeyT]{
+		vault:   vault,
+		objType: objType,
 	}
 }
 
-type ObjectSet[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
+func (os *objectSet[objT, idT, shardKeyT]) WithTextSearch() ObjectSetSetup[objT, idT, shardKeyT] {
+	os.textSearch = true
+	return os
+}
+
+func (os *objectSet[objT, idT, shardKeyT]) WithIndexes(indexes ...string) ObjectSetSetup[objT, idT, shardKeyT] {
+	os.indexes = append(os.indexes, os.objType.Name())
+	return os
+}
+
+func (os *objectSet[objT, idT, shardKeyT]) WithCompute(compute func(ctx convCtx.Context, md Metadata, obj *objT) error) ObjectSetSetup[objT, idT, shardKeyT] {
+	os.compute = append(os.compute, compute)
+	return os
+}
+
+func (os *objectSet[objT, idT, shardKeyT]) Ready() ObjectSetReady[objT, idT, shardKeyT] {
+	return os
+}
+
+type ObjectSetSetup[objT Object[idT, shardKeyT], idT, shardKeyT ~string] interface {
+	WithTextSearch() ObjectSetSetup[objT, idT, shardKeyT]
+	WithIndexes(indexes ...string) ObjectSetSetup[objT, idT, shardKeyT]
+	WithCompute(compute func(ctx convCtx.Context, md Metadata, obj *objT) error) ObjectSetSetup[objT, idT, shardKeyT]
+	Ready() ObjectSetReady[objT, idT, shardKeyT]
+}
+
+type ObjectSetReady[objT Object[idT, shardKeyT], idT, shardKeyT ~string] interface {
+	Tenant(tenant convAuth.Tenant) TenantObjectSet[objT, idT, shardKeyT]
+}
+
+type objectSet[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
 	prepared   bool
 	vault      Vault
 	textSearch bool
 	indexes    []string
+	compute    []func(ctx convCtx.Context, md Metadata, obj *objT) error
 	objType    reflect.Type
 	table      dbTable
 }
 
-func (os *ObjectSet[objT, idT, shardKeyT]) prepare() (err error) {
+func (os *objectSet[objT, idT, shardKeyT]) prepare() (err error) {
 
 	if os.prepared {
 		return nil
@@ -185,14 +215,14 @@ ON "` + runtimeTableName + `" USING gin ("text_search");
 	return
 }
 
-func (os ObjectSet[objT, idT, shardKeyT]) Tenant(tenant convAuth.Tenant) TenantObjectSet[objT, idT, shardKeyT] {
+func (os objectSet[objT, idT, shardKeyT]) Tenant(tenant convAuth.Tenant) TenantObjectSet[objT, idT, shardKeyT] {
 	return TenantObjectSet[objT, idT, shardKeyT]{
-		ObjectSet: os,
+		objectSet: os,
 		tenant:    convAuth.Tenant(tenant),
 	}
 }
 
 type TenantObjectSet[objT Object[idT, shardKeyT], idT, shardKeyT ~string] struct {
-	ObjectSet[objT, idT, shardKeyT]
+	objectSet[objT, idT, shardKeyT]
 	tenant convAuth.Tenant
 }
