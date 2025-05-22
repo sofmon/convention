@@ -150,7 +150,7 @@ func (x *InOutP4[inT, outT, p1T, p2T, p3T, p4T]) Call(ctx convCtx.Context, p1 p1
 		}
 	}
 
-	err = errors.New("unexpected status code: " + res.Status)
+	err = errors.New("unexpected status code: " + res.Status + " @ " + req.Method + " " + req.URL.String())
 
 	return
 }

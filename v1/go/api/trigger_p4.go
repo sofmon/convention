@@ -127,7 +127,7 @@ func (x *TriggerP4[p1T, p2T, p3T, p4T]) Call(ctx convCtx.Context, p1 p1T, p2 p2T
 		}
 	}
 
-	err = errors.New("unexpected status code: " + res.Status)
+	err = errors.New("unexpected status code: " + res.Status + " @ " + req.Method + " " + req.URL.String())
 
 	return
 }

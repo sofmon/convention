@@ -122,7 +122,7 @@ func (x *Out[outT]) Call(ctx convCtx.Context) (out outT, err error) {
 		}
 	}
 
-	err = errors.New("unexpected status code: " + res.Status)
+	err = errors.New("unexpected status code: " + res.Status + " @ " + req.Method + " " + req.URL.String())
 
 	return
 }

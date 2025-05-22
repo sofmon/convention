@@ -140,7 +140,7 @@ func (x *InP2[inT, p1T, p2T]) Call(ctx convCtx.Context, p1 p1T, p2 p2T, in inT) 
 		}
 	}
 
-	err = errors.New("unexpected status code: " + res.Status)
+	err = errors.New("unexpected status code: " + res.Status + " @ " + req.Method + " " + req.URL.String())
 
 	return
 }

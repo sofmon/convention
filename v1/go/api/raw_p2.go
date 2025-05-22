@@ -111,7 +111,7 @@ func (x *RawP2[p1T, p2T]) Call(ctx convCtx.Context, p1 p1T, p2 p2T, body io.Read
 		}
 	}
 
-	err = errors.New("unexpected status code: " + res.Status)
+	err = errors.New("unexpected status code: " + res.Status + " @ " + req.Method + " " + req.URL.String())
 
 	return
 }
