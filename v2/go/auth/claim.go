@@ -1,10 +1,11 @@
 package auth
 
 type Claims struct {
-	User     User
-	Entities Entities
-	Tenants  Tenants
-	Roles    Roles
+	User      User
+	Entities  Entities
+	Tenants   Tenants
+	Roles     Roles
+	Additions map[string]any
 }
 
 const (

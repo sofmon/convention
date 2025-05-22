@@ -75,6 +75,12 @@ func GenerateToken(claims Claims) (string, error) {
 	}
 
 	rawClaim := make(map[string]any)
+
+	for k, v := range claims.Additions {
+		rawClaim[k] = v
+	}
+
+	// fixed claims overwrite any additions with the same key
 	rawClaim[claimUser] = string(claims.User)
 	rawClaim[claimEntities] = claims.Entities
 	rawClaim[claimTenants] = claims.Tenants
