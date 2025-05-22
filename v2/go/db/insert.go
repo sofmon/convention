@@ -178,21 +178,6 @@ func (tos TenantObjectSet[objT, idT, shardKeyT]) UpsertWithMetadata(ctx convCtx.
 		err = tx.Commit()
 	}()
 
-	err = tx.QueryRow(`SELECT "created_at", "created_by", "updated_at", "updated_by" FROM "`+tos.table.RuntimeTableName+`" WHERE id=$1`, key.ID).
-		Scan(&obj.Metadata.CreatedAt, &obj.Metadata.CreatedBy, &obj.Metadata.UpdatedAt, &obj.Metadata.UpdatedBy)
-	if err != nil && err != sql.ErrNoRows {
-		return
-	}
-	if err == sql.ErrNoRows {
-		obj.Metadata.CreatedAt = ctx.Now()
-		obj.Metadata.CreatedBy = ctx.User()
-		obj.Metadata.UpdatedAt = obj.Metadata.CreatedAt
-		obj.Metadata.UpdatedBy = obj.Metadata.CreatedBy
-	} else {
-		obj.Metadata.UpdatedAt = ctx.Now()
-		obj.Metadata.UpdatedBy = ctx.User()
-	}
-
 	for _, compute := range tos.compute {
 		err = compute(ctx, obj.Metadata, &obj.Object)
 		if err != nil {
