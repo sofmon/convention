@@ -61,7 +61,7 @@ func (x *Out[outT]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *h
 		if errors.As(err, &apiErr) {
 			serveError(w, *apiErr)
 		} else {
-			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
+			ServeError(ctx, w, http.StatusInternalServerError, ErrorCodeInternalError, "unexpected error", err)
 		}
 	} else {
 		ServeJSON(w, out)

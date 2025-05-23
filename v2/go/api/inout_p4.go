@@ -59,12 +59,12 @@ func (x *InOutP4[inT, outT, p1T, p2T, p3T, p4T]) execIfMatch(ctx convCtx.Context
 	var in inT
 	err := json.NewDecoder(r.Body).Decode(&in)
 	if err != nil {
-		ServeError(w, http.StatusBadRequest, ErrorCodeBadRequest, err.Error())
+		ServeError(ctx, w, http.StatusBadRequest, ErrorCodeBadRequest, "unable to decode http payload", err)
 		return true
 	}
 
 	out, err := x.fn(
-		ctx.WithRequest(r),
+		ctx,
 		p1T(values.GetByIndex(0)),
 		p2T(values.GetByIndex(1)),
 		p3T(values.GetByIndex(2)),
@@ -76,7 +76,7 @@ func (x *InOutP4[inT, outT, p1T, p2T, p3T, p4T]) execIfMatch(ctx convCtx.Context
 		if errors.As(err, &apiErr) {
 			serveError(w, *apiErr)
 		} else {
-			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
+			ServeError(ctx, w, http.StatusInternalServerError, ErrorCodeInternalError, "unexpected error", err)
 		}
 	} else {
 		ServeJSON(w, out)

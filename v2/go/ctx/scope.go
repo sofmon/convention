@@ -11,7 +11,7 @@ func (ctx Context) WithScope(scope string) Context {
 		context.WithValue(
 			ctx.Context,
 			contextKeyScope,
-			ctx.Scope()+" > "+scope,
+			ctx.Scope()+" → "+scope,
 		),
 	}
 }

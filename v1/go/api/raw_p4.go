@@ -25,7 +25,7 @@ func (x RawP4[p1T, p2T, p3T, p4T]) WithPreCheck(check Check) RawP4[p1T, p2T, p3T
 				if errors.As(err, &apiErr) {
 					serveError(w, *apiErr)
 				} else {
-					ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
+					ServeError(ctx, w, http.StatusInternalServerError, ErrorCodeInternalError, "unexpected error", err)
 				}
 				return
 			}
@@ -48,7 +48,7 @@ func (x *RawP4[p1T, p2T, p3T, p4T]) execIfMatch(ctx convCtx.Context, w http.Resp
 	}
 
 	x.fn(
-		ctx.WithRequest(r),
+		ctx,
 		p1T(values.GetByIndex(0)),
 		p2T(values.GetByIndex(1)),
 		p3T(values.GetByIndex(2)),

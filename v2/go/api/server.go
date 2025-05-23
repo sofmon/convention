@@ -89,21 +89,22 @@ type httpHandler struct {
 }
 
 func (h httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx := h.ctx
+	ctx := h.ctx.
+		WithRequest(r)
 
 	err := h.check(r)
 	if err != nil {
 		switch err {
 		case convAuth.ErrMissingRequest:
-			ServeError(w, http.StatusBadRequest, ErrorCodeBadRequest, err.Error())
+			ServeError(ctx, w, http.StatusBadRequest, ErrorCodeBadRequest, "missing http request", err)
 			return
 		case convAuth.ErrForbidden,
 			convAuth.ErrMissingAuthorizationHeader,
 			convAuth.ErrInvalidAuthorizationToken:
-			ServeError(w, http.StatusForbidden, ErrorCodeForbidden, err.Error())
+			ServeError(ctx, w, http.StatusForbidden, ErrorCodeForbidden, "missing or wrong authentication token", err)
 			return
 		default:
-			ServeError(w, http.StatusUnauthorized, ErrorCodeUnauthorized, err.Error())
+			ServeError(ctx, w, http.StatusUnauthorized, ErrorCodeUnauthorized, "unexpected error", err)
 			return
 		}
 	}
@@ -117,7 +118,7 @@ func (h httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !ok {
-			ServeError(w, http.StatusNotFound, ErrorCodeNotFound, "Endpoint not found")
+			ServeError(ctx, w, http.StatusNotFound, ErrorCodeNotFound, "Endpoint not found", nil)
 		}
 	})
 }

@@ -56,7 +56,7 @@ func (x *OutP3[outT, p1T, p2T, p3T]) execIfMatch(ctx convCtx.Context, w http.Res
 	}
 
 	out, err := x.fn(
-		ctx.WithRequest(r),
+		ctx,
 		p1T(values.GetByIndex(0)),
 		p2T(values.GetByIndex(1)),
 		p3T(values.GetByIndex(2)),
@@ -66,7 +66,7 @@ func (x *OutP3[outT, p1T, p2T, p3T]) execIfMatch(ctx convCtx.Context, w http.Res
 		if errors.As(err, &apiErr) {
 			serveError(w, *apiErr)
 		} else {
-			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
+			ServeError(ctx, w, http.StatusInternalServerError, ErrorCodeInternalError, "unexpected error", err)
 		}
 	} else {
 		ServeJSON(w, out)

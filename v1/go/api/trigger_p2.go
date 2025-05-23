@@ -52,7 +52,7 @@ func (x *TriggerP2[p1T, p2T]) execIfMatch(ctx convCtx.Context, w http.ResponseWr
 	}
 
 	err := x.fn(
-		ctx.WithRequest(r),
+		ctx,
 		p1T(values.GetByIndex(0)),
 		p2T(values.GetByIndex(1)),
 	)
@@ -61,7 +61,7 @@ func (x *TriggerP2[p1T, p2T]) execIfMatch(ctx convCtx.Context, w http.ResponseWr
 		if errors.As(err, &apiErr) {
 			serveError(w, *apiErr)
 		} else {
-			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
+			ServeError(ctx, w, http.StatusInternalServerError, ErrorCodeInternalError, "unexpected error", err)
 		}
 	} else {
 		w.WriteHeader(http.StatusOK)

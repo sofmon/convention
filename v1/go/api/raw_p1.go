@@ -25,7 +25,7 @@ func (x RawP1[p1T]) WithPreCheck(check Check) RawP1[p1T] {
 				if errors.As(err, &apiErr) {
 					serveError(w, *apiErr)
 				} else {
-					ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
+					ServeError(ctx, w, http.StatusInternalServerError, ErrorCodeInternalError, "unexpected error", err)
 				}
 				return
 			}
@@ -48,7 +48,7 @@ func (x *RawP1[p1T]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *
 	}
 
 	x.fn(
-		ctx.WithRequest(r),
+		ctx,
 		p1T(values.GetByIndex(0)),
 		w,
 		r,
