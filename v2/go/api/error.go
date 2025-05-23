@@ -30,7 +30,7 @@ func NewError(ctx convCtx.Context, status int, code ErrorCode, message string, i
 	r := ctx.Request()
 	if r != nil {
 		err.Method = r.Method
-		err.URL = r.URL.String()
+		err.URL = r.URL.Path
 	}
 	if inner != nil {
 		if apiErr, ok := inner.(*Error); ok {
@@ -84,7 +84,7 @@ func serveError(w http.ResponseWriter, err Error) {
 
 func parseRemoteError(ctx convCtx.Context, req *http.Request, res *http.Response) (err Error) {
 
-	targetUrl := req.URL.String()
+	targetUrl := req.URL.Path
 	targetMethod := req.Method
 
 	var (
@@ -113,7 +113,7 @@ func parseRemoteError(ctx convCtx.Context, req *http.Request, res *http.Response
 	}
 
 	err = Error{
-		URL:     req.URL.String(),
+		URL:     req.URL.Path,
 		Method:  req.Method,
 		Status:  res.StatusCode,
 		Code:    code,
