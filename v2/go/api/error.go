@@ -20,7 +20,12 @@ const (
 	ErrorCodeUnexpectedStatusCode ErrorCode = "unexpected_status_code"
 )
 
-func NewError(ctx convCtx.Context, status int, code ErrorCode, message string, inner error) (err Error) {
+func NewError(ctx convCtx.Context, status int, code ErrorCode, message string, inner error) error {
+	err := newError(ctx, status, code, message, inner)
+	return &err
+}
+
+func newError(ctx convCtx.Context, status int, code ErrorCode, message string, inner error) (err Error) {
 	err.Status = status
 	err.Code = code
 	err.Message = message
@@ -73,7 +78,7 @@ func (e Error) Error() string {
 }
 
 func ServeError(ctx convCtx.Context, w http.ResponseWriter, status int, code ErrorCode, message string, inner error) {
-	serveError(w, NewError(ctx, status, code, message, inner))
+	serveError(w, newError(ctx, status, code, message, inner))
 }
 
 func serveError(w http.ResponseWriter, err Error) {
