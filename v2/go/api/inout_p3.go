@@ -139,16 +139,7 @@ func (x *InOutP3[inT, outT, p1T, p2T, p3T]) Call(ctx convCtx.Context, p1 p1T, p2
 		return
 	}
 
-	if res.StatusCode == http.StatusConflict {
-		var eErr Error
-		err = json.NewDecoder(res.Body).Decode(&eErr)
-		if err == nil { // if we have error here, we leave it to the generic error below
-			err = eErr
-			return
-		}
-	}
-
-	err = errors.New("unexpected status code: " + res.Status + " @ " + req.Method + " " + req.URL.String())
+	err = parseRemoteError(ctx, req, res)
 
 	return
 }

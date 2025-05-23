@@ -59,12 +59,12 @@ func (x *InOutP1[inT, outT, p1T]) execIfMatch(ctx convCtx.Context, w http.Respon
 	var in inT
 	err := json.NewDecoder(r.Body).Decode(&in)
 	if err != nil {
-		ServeError(ctx, w, http.StatusBadRequest, ErrorCodeBadRequest, "unable to decode http payload", err)
+		ServeError(w, http.StatusBadRequest, ErrorCodeBadRequest, err.Error())
 		return true
 	}
 
 	out, err := x.fn(
-		ctx,
+		ctx.WithRequest(r),
 		p1T(values.GetByIndex(0)),
 		in,
 	)
@@ -73,7 +73,7 @@ func (x *InOutP1[inT, outT, p1T]) execIfMatch(ctx convCtx.Context, w http.Respon
 		if errors.As(err, &apiErr) {
 			serveError(w, *apiErr)
 		} else {
-			ServeError(ctx, w, http.StatusInternalServerError, ErrorCodeInternalError, "unexpected error", err)
+			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 		}
 	} else {
 		ServeJSON(w, out)
@@ -144,7 +144,7 @@ func (x *InOutP1[inT, outT, p1T]) Call(ctx convCtx.Context, p1 p1T, in inT) (out
 		}
 	}
 
-	err = errors.New("unexpected status code: " + res.Status + " @ " + req.Method + " " + req.URL.String())
+	err = errors.New("unexpected status code: " + res.Status)
 
 	return
 }

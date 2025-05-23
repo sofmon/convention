@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"reflect"
@@ -117,15 +116,7 @@ func (x *TriggerP3[p1T, p2T, p3T]) Call(ctx convCtx.Context, p1 p1T, p2 p2T, p3 
 		return
 	}
 
-	if res.StatusCode == http.StatusConflict {
-		var eErr Error
-		err = json.NewDecoder(res.Body).Decode(&eErr)
-		if err == nil { // if we have error here, we leave it to the generic error below
-			return eErr
-		}
-	}
-
-	err = errors.New("unexpected status code: " + res.Status + " @ " + req.Method + " " + req.URL.String())
+	err = parseRemoteError(ctx, req, res)
 
 	return
 }

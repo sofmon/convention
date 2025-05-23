@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"reflect"
@@ -106,15 +105,7 @@ func (x *Trigger) Call(ctx convCtx.Context) (err error) {
 		return
 	}
 
-	if res.StatusCode == http.StatusConflict {
-		var eErr Error
-		err = json.NewDecoder(res.Body).Decode(&eErr)
-		if err == nil { // if we have error here, we leave it to the generic error below
-			return eErr
-		}
-	}
-
-	err = errors.New("unexpected status code: " + res.Status + " @ " + req.Method + " " + req.URL.String())
+	err = parseRemoteError(ctx, req, res)
 
 	return
 }

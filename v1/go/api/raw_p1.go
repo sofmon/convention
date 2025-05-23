@@ -25,7 +25,7 @@ func (x RawP1[p1T]) WithPreCheck(check Check) RawP1[p1T] {
 				if errors.As(err, &apiErr) {
 					serveError(w, *apiErr)
 				} else {
-					ServeError(ctx, w, http.StatusInternalServerError, ErrorCodeInternalError, "unexpected error", err)
+					ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 				}
 				return
 			}
@@ -48,7 +48,7 @@ func (x *RawP1[p1T]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *
 	}
 
 	x.fn(
-		ctx,
+		ctx.WithRequest(r),
 		p1T(values.GetByIndex(0)),
 		w,
 		r,
@@ -109,7 +109,7 @@ func (x *RawP1[p1T]) Call(ctx convCtx.Context, p1 p1T, body io.Reader) (err erro
 		}
 	}
 
-	err = errors.New("unexpected status code: " + res.Status + " @ " + req.Method + " " + req.URL.String())
+	err = errors.New("unexpected status code: " + res.Status)
 
 	return
 }

@@ -55,7 +55,7 @@ func (x *In[inT]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 	var in inT
 	err := json.NewDecoder(r.Body).Decode(&in)
 	if err != nil {
-		ServeError(ctx, w, http.StatusBadRequest, ErrorCodeBadRequest, "unable to decode http payload", err)
+		ServeError(w, http.StatusBadRequest, ErrorCodeBadRequest, err.Error())
 		return true
 	}
 
@@ -65,7 +65,7 @@ func (x *In[inT]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 		if errors.As(err, &apiErr) {
 			serveError(w, *apiErr)
 		} else {
-			ServeError(ctx, w, http.StatusInternalServerError, ErrorCodeInternalError, "unexpected error", err)
+			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 		}
 	} else {
 		w.WriteHeader(http.StatusOK)
@@ -131,7 +131,7 @@ func (x *In[inT]) Call(ctx convCtx.Context, in inT) (err error) {
 		}
 	}
 
-	err = errors.New("unexpected status code: " + res.Status + " @ " + req.Method + " " + req.URL.String())
+	err = errors.New("unexpected status code: " + res.Status)
 
 	return
 }

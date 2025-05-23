@@ -12,11 +12,12 @@ import (
 type ErrorCode string
 
 const (
-	ErrorCodeInternalError ErrorCode = "internal_error"
-	ErrorCodeNotFound      ErrorCode = "not_found"
-	ErrorCodeBadRequest    ErrorCode = "bad_request"
-	ErrorCodeForbidden     ErrorCode = "forbidden"
-	ErrorCodeUnauthorized  ErrorCode = "unauthorized"
+	ErrorCodeInternalError        ErrorCode = "internal_error"
+	ErrorCodeNotFound             ErrorCode = "not_found"
+	ErrorCodeBadRequest           ErrorCode = "bad_request"
+	ErrorCodeForbidden            ErrorCode = "forbidden"
+	ErrorCodeUnauthorized         ErrorCode = "unauthorized"
+	ErrorCodeUnexpectedStatusCode ErrorCode = "unexpected_status_code"
 )
 
 func NewError(ctx convCtx.Context, status int, code ErrorCode, message string, inner error) (err Error) {
@@ -79,4 +80,47 @@ func serveError(w http.ResponseWriter, err Error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(err.Status)
 	json.NewEncoder(w).Encode(err)
+}
+
+func parseRemoteError(ctx convCtx.Context, req *http.Request, res *http.Response) (err Error) {
+
+	targetUrl := req.URL.String()
+	targetMethod := req.Method
+
+	var (
+		inner *Error
+	)
+	inner = &Error{} // reserve memory for inner error
+	if e := json.NewDecoder(res.Body).Decode(inner); e != nil {
+		inner = nil // no inner error
+	}
+
+	if inner != nil &&
+		(inner.URL == "" || inner.Method == "" || inner.Status == 0) { // inner is not complete
+		inner = nil // no inner error
+	}
+
+	if inner != nil && inner.URL != targetUrl && inner.Method != targetMethod {
+		err = *inner // if URL and method matches return the inner error directly, no need to wrap it again
+		return
+	}
+
+	var code ErrorCode
+	if inner != nil {
+		code = inner.Code
+	} else {
+		code = ErrorCodeUnexpectedStatusCode
+	}
+
+	err = Error{
+		URL:     req.URL.String(),
+		Method:  req.Method,
+		Status:  res.StatusCode,
+		Code:    code,
+		Scope:   ctx.Scope(),
+		Message: "unexpected status code: " + res.Status,
+		Inner:   inner,
+	}
+
+	return
 }

@@ -56,7 +56,7 @@ func (x *OutP1[outT, p1T]) execIfMatch(ctx convCtx.Context, w http.ResponseWrite
 	}
 
 	out, err := x.fn(
-		ctx,
+		ctx.WithRequest(r),
 		p1T(values.GetByIndex(0)),
 	)
 	if err != nil {
@@ -64,7 +64,7 @@ func (x *OutP1[outT, p1T]) execIfMatch(ctx convCtx.Context, w http.ResponseWrite
 		if errors.As(err, &apiErr) {
 			serveError(w, *apiErr)
 		} else {
-			ServeError(ctx, w, http.StatusInternalServerError, ErrorCodeInternalError, "unexpected error", err)
+			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 		}
 	} else {
 		ServeJSON(w, out)
@@ -129,7 +129,7 @@ func (x *OutP1[outT, p1T]) Call(ctx convCtx.Context, p1 p1T) (out outT, err erro
 		}
 	}
 
-	err = errors.New("unexpected status code: " + res.Status + " @ " + req.Method + " " + req.URL.String())
+	err = errors.New("unexpected status code: " + res.Status)
 
 	return
 }
