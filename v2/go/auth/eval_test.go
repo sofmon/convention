@@ -23,6 +23,9 @@ var (
 				"read_all_assets_all_tenants",
 				"write_all_assets_all_tenants",
 			},
+			"access_anything": convAuth.Permissions{
+				"access_anything",
+			},
 		},
 		Permissions: convAuth.PermissionActions{
 			"read_own_assets": convAuth.Actions{
@@ -51,6 +54,9 @@ var (
 			"write_all_assets_all_tenants": convAuth.Actions{
 				"PUT /tenants/{any}/users/{any}/assets/{any}",
 				"PUT /tenants/{any}/users/{any}/open/{any...}",
+			},
+			"access_anything": convAuth.Actions{
+				"GET /{any...}",
 			},
 		},
 		Public: convAuth.Actions{
@@ -158,6 +164,21 @@ var (
 				// disallowed methods
 				{Method: "POST", URL: &url.URL{Path: "/tenants/tenant1/users/user1/assets/asset1"}},
 				{Method: "DELETE", URL: &url.URL{Path: "/tenants/tenant1/users/user1/assets/asset1"}},
+			},
+		},
+		{
+			name:    "test access anything with {any...} as root",
+			cfg:     fullConfig,
+			user:    "user1",
+			tenants: convAuth.Tenants{"tenant1"},
+			roles:   convAuth.Roles{"access_anything"},
+			pass: []*http.Request{
+				{Method: "GET", URL: &url.URL{Path: "/"}},
+				{Method: "GET", URL: &url.URL{Path: "/anything"}},
+				{Method: "GET", URL: &url.URL{Path: "/anything/else"}},
+				{Method: "GET", URL: &url.URL{Path: "/anything/else/that/"}},
+				{Method: "GET", URL: &url.URL{Path: "/anything/else/that/is/"}},
+				{Method: "GET", URL: &url.URL{Path: "/anything/else/that/is/whatever"}},
 			},
 		},
 		{
