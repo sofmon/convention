@@ -71,27 +71,17 @@ func NewCheck(cfg Config) (check Check, err error) {
 
 		segments := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
-		claims, err := DecodeHTTPRequestClaims(r)
-		if err == ErrMissingAuthorizationHeader {
-			// check only public endpoints
-			if publicEndpoints.match(
-				r.Method,
-				segments,
-				Claims{},
-			) {
-				return nil
-			}
-		}
-		if err != nil {
-			return ErrInvalidAuthorizationToken
-		}
-
 		if publicEndpoints.match(
 			r.Method,
 			segments,
-			claims,
+			Claims{},
 		) {
 			return nil
+		}
+
+		claims, err := DecodeHTTPRequestClaims(r)
+		if err != nil {
+			return err
 		}
 
 		if allowedRoles.match(
