@@ -117,7 +117,7 @@ func generateAllowedAction(a Action) (res allowedAction, err error) {
 
 	segments := strings.Split(path, "/")
 
-	openEnd := strings.HasSuffix(path, "/{any...}") || path == "{any...}"
+	openEnd := strings.HasSuffix(path, "{any...}")
 	if openEnd {
 		segments = segments[:len(segments)-1]
 	}
