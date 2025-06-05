@@ -130,7 +130,7 @@ func parseRemoteError(ctx convCtx.Context, req *http.Request, res *http.Response
 		code = ErrorCodeUnexpectedStatusCode
 	}
 
-	err = Error{
+	err = &Error{
 		URL:     req.URL.Path,
 		Method:  req.Method,
 		Status:  res.StatusCode,
