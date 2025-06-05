@@ -20,6 +20,16 @@ const (
 	ErrorCodeUnexpectedStatusCode ErrorCode = "unexpected_status_code"
 )
 
+func ErrorHasCode(err error, code ErrorCode) bool {
+	if err == nil {
+		return false
+	}
+	if apiErr, ok := err.(*Error); ok {
+		return apiErr.Code == code
+	}
+	return false
+}
+
 func NewError(ctx convCtx.Context, status int, code ErrorCode, message string, inner error) error {
 	err := newError(ctx, status, code, message, inner)
 	return &err
