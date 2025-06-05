@@ -23,7 +23,7 @@ func (x RawP1[p1T]) WithPreCheck(check Check) RawP1[p1T] {
 			if err != nil {
 				var apiErr *Error
 				if errors.As(err, &apiErr) {
-					serveError(w, *apiErr)
+					serveError(w, apiErr)
 				} else {
 					ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 				}

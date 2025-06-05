@@ -33,16 +33,17 @@ func ErrorHasCode(err error, code ErrorCode) bool {
 }
 
 func NewError(ctx convCtx.Context, status int, code ErrorCode, message string, inner error) error {
-	err := newError(ctx, status, code, message, inner)
-	return &err
+	return newError(ctx, status, code, message, inner)
 }
 
-func newError(ctx convCtx.Context, status int, code ErrorCode, message string, inner error) (err Error) {
-	err.Status = status
-	err.Code = code
-	err.Message = message
+func newError(ctx convCtx.Context, status int, code ErrorCode, message string, inner error) (err *Error) {
 
-	err.Scope = ctx.Scope()
+	err = &Error{
+		Status:  status,
+		Code:    code,
+		Message: message,
+		Scope:   ctx.Scope(),
+	}
 
 	r := ctx.Request()
 	if r != nil {
@@ -93,13 +94,13 @@ func ServeError(ctx convCtx.Context, w http.ResponseWriter, status int, code Err
 	serveError(w, newError(ctx, status, code, message, inner))
 }
 
-func serveError(w http.ResponseWriter, err Error) {
+func serveError(w http.ResponseWriter, err *Error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(err.Status)
 	json.NewEncoder(w).Encode(err)
 }
 
-func parseRemoteError(ctx convCtx.Context, req *http.Request, res *http.Response) (err Error) {
+func parseRemoteError(ctx convCtx.Context, req *http.Request, res *http.Response) (err error) {
 
 	targetUrl := req.URL.Path
 	targetMethod := req.Method

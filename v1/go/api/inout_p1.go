@@ -71,7 +71,7 @@ func (x *InOutP1[inT, outT, p1T]) execIfMatch(ctx convCtx.Context, w http.Respon
 	if err != nil {
 		var apiErr *Error
 		if errors.As(err, &apiErr) {
-			serveError(w, *apiErr)
+			serveError(w, apiErr)
 		} else {
 			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 		}

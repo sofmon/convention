@@ -58,7 +58,7 @@ func (x *TriggerP1[p1T]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter,
 	if err != nil {
 		var apiErr *Error
 		if errors.As(err, &apiErr) {
-			serveError(w, *apiErr)
+			serveError(w, apiErr)
 		} else {
 			ServeError(w, http.StatusInternalServerError, ErrorCodeInternalError, err.Error())
 		}
