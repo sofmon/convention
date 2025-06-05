@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,7 +25,8 @@ func ErrorHasCode(err error, code ErrorCode) bool {
 	if err == nil {
 		return false
 	}
-	if apiErr, ok := err.(*Error); ok {
+	var apiErr *Error
+	if errors.As(err, &apiErr) {
 		return apiErr.Code == code
 	}
 	return false
