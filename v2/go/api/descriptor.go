@@ -235,6 +235,16 @@ func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
 				if jsonTag == "-" {
 					continue // Skip fields with json tag "-"
 				}
+
+				if field.Anonymous {
+					// If the field is an anonymous struct, we recursively add its fields
+					subObject := objectFromType(field.Type, knownObjects...)
+					for subName, subField := range subObject.Fields {
+						o.Fields[subName] = subField
+					}
+					continue
+				}
+
 				if jsonTag != "" {
 					jsonTag = strings.Split(jsonTag, ",")[0]
 				}

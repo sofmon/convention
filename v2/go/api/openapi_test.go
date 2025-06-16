@@ -591,6 +591,61 @@ paths:
 	)
 }
 
+func Test_openapi_anonymous_fields(t *testing.T) {
+
+	type AnonymousObject struct {
+		IntField    int
+		StringField string
+	}
+
+	type ParentObject struct {
+		AnonymousObject
+		FloatField float64
+	}
+
+	checkOpenAPI(
+		t,
+		&struct {
+			GetOpenAPI             convAPI.OpenAPI           `api:"GET /test/v1/openapi.yaml"`
+			GetObjectWithAnonymous convAPI.Out[ParentObject] `api:"GET /test/v1/object_with_anonymous"`
+		}{},
+		`openapi: 3.0.0
+info:
+	title: API
+	version: 1.0.0
+components:
+	schemas:
+		parent_object:
+			type: object
+			properties:
+				float_field:
+					type: number
+				int_field:
+					type: integer
+				string_field:
+					type: string
+			required:
+				- float_field
+				- int_field
+				- string_field
+paths:
+	/test/v1/object_with_anonymous:
+		get:
+			responses:
+				'200':
+					description: OK
+					content:
+						application/json:
+							schema:
+								$ref: '#/components/schemas/parent_object'
+	/test/v1/openapi.yaml:
+		get:
+			responses:
+				'200':
+					description: OK`,
+	)
+}
+
 func checkOpenAPI(t *testing.T, api any, expectedOpenAPI string) {
 
 	ctx := convCtx.New(convAuth.Claims{
