@@ -284,7 +284,7 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 				sb.WriteString("        content:\n")
 				sb.WriteString("          application/json:\n")
 				sb.WriteString("            schema:\n")
-				sb.WriteString(fmt.Sprintf("              $ref: '#/components/schemas/%s'\n", snakeName(x.objOrSub(desc.in).Name)))
+				sb.WriteString(fmt.Sprintf("              $ref: '#/components/schemas/%s'\n", x.objOrSub(desc.in).Name))
 			}
 			sb.WriteString("      responses:\n")
 			sb.WriteString("        '200':\n")
@@ -293,7 +293,7 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 				sb.WriteString("          content:\n")
 				sb.WriteString("            application/json:\n")
 				sb.WriteString("              schema:\n")
-				sb.WriteString(fmt.Sprintf("                $ref: '#/components/schemas/%s'\n", snakeName(x.objOrSub(desc.out).Name)))
+				sb.WriteString(fmt.Sprintf("                $ref: '#/components/schemas/%s'\n", x.objOrSub(desc.out).Name))
 			}
 		}
 	}

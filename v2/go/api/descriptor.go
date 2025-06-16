@@ -127,6 +127,7 @@ type object struct {
 func snakeName(name string) string {
 	sb := strings.Builder{}
 	wasCapital := false
+	wasNumber := false
 	for i, r := range name {
 		isCapital := 'A' <= r && r <= 'Z'
 		isNumber := '0' <= r && r <= '9'
@@ -141,8 +142,12 @@ func snakeName(name string) string {
 		if isCapital && !wasCapital {
 			sb.WriteRune('_')
 		}
+		if isNumber && !wasNumber {
+			sb.WriteRune('_')
+		}
 		sb.WriteRune(r)
 		wasCapital = isCapital
+		wasNumber = isNumber
 	}
 	return strings.ToLower(sb.String())
 }
@@ -155,12 +160,46 @@ func friendlyName(t reflect.Type) string {
 	case reflect.Map:
 		return "map_by_" + friendlyName(t.Key()) + "_of_" + friendlyName(t.Elem())
 	default:
-		name := t.String()
-		if dotIndex := strings.LastIndex(name, "."); dotIndex != -1 {
-			name = name[dotIndex+1:]
-		}
-		return snakeName(name)
+		return snakeName(strings.Join(extractAllNames(t.String()), " "))
 	}
+}
+
+// extractAllNames extracts all type names from a string representation of a type,
+func extractAllNames(s string) []string {
+	if !strings.Contains(s, "[") {
+		return []string{simplifyTypeName(s)}
+	}
+
+	var result []string
+	var curr strings.Builder
+	depth := 0
+
+	for _, ch := range s {
+		switch ch {
+		case '[':
+			if depth == 0 {
+				result = append(result, simplifyTypeName(curr.String()))
+			}
+			curr.Reset()
+			depth++
+		case ']':
+			if curr.Len() > 0 {
+				result = append(result, simplifyTypeName(curr.String()))
+				curr.Reset()
+			}
+			depth--
+		default:
+			curr.WriteRune(ch)
+		}
+	}
+	return result
+}
+
+func simplifyTypeName(name string) string {
+	if dotIndex := strings.LastIndex(name, "."); dotIndex != -1 {
+		return name[dotIndex+1:]
+	}
+	return name
 }
 
 func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {

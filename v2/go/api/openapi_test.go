@@ -98,46 +98,46 @@ components:
 			properties:
 				bool_field:
 					type: boolean
-				float32_field:
+				float_32_field:
 					type: number
-				float64_field:
+				float_64_field:
 					type: number
-				int16_field:
+				int_16_field:
 					type: integer
-				int32_field:
+				int_32_field:
 					type: integer
-				int64_field:
+				int_64_field:
 					type: integer
-				int8_field:
+				int_8_field:
 					type: integer
 				int_field:
 					type: integer
 				string_field:
 					type: string
-				uint16_field:
+				uint_16_field:
 					type: integer
-				uint32_field:
+				uint_32_field:
 					type: integer
-				uint64_field:
+				uint_64_field:
 					type: integer
-				uint8_field:
+				uint_8_field:
 					type: integer
 				uint_field:
 					type: integer
 			required:
 				- bool_field
-				- float32_field
-				- float64_field
-				- int16_field
-				- int32_field
-				- int64_field
-				- int8_field
+				- float_32_field
+				- float_64_field
+				- int_16_field
+				- int_32_field
+				- int_64_field
+				- int_8_field
 				- int_field
 				- string_field
-				- uint16_field
-				- uint32_field
-				- uint64_field
-				- uint8_field
+				- uint_16_field
+				- uint_32_field
+				- uint_64_field
+				- uint_8_field
 				- uint_field
 paths:
 	/test/v1/openapi.yaml:
@@ -638,6 +638,60 @@ paths:
 						application/json:
 							schema:
 								$ref: '#/components/schemas/parent_object'
+	/test/v1/openapi.yaml:
+		get:
+			responses:
+				'200':
+					description: OK`,
+	)
+}
+
+func Test_openapi_generics_fields(t *testing.T) {
+
+	type Template[T any] struct {
+		Object T
+	}
+
+	type TargetObject struct {
+		FloatField float64
+	}
+
+	checkOpenAPI(
+		t,
+		&struct {
+			GetOpenAPI  convAPI.OpenAPI                     `api:"GET /test/v1/openapi.yaml"`
+			GetGenerics convAPI.Out[Template[TargetObject]] `api:"GET /test/v1/generics"`
+		}{},
+		`openapi: 3.0.0
+info:
+	title: API
+	version: 1.0.0
+components:
+	schemas:
+		target_object:
+			type: object
+			properties:
+				float_field:
+					type: number
+			required:
+				- float_field
+		template_target_object_20:
+			type: object
+			properties:
+				object:
+					$ref: '#/components/schemas/target_object'
+			required:
+				- object
+paths:
+	/test/v1/generics:
+		get:
+			responses:
+				'200':
+					description: OK
+					content:
+						application/json:
+							schema:
+								$ref: '#/components/schemas/template_target_object_20'
 	/test/v1/openapi.yaml:
 		get:
 			responses:
