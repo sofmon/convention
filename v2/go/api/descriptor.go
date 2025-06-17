@@ -294,8 +294,11 @@ func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
 			}
 		}
 
+	case reflect.Interface:
+		o.Type = objectTypeObject
+
 	case reflect.Invalid, reflect.Uintptr, reflect.Complex64, reflect.Complex128,
-		reflect.Chan, reflect.Func, reflect.Interface,
+		reflect.Chan, reflect.Func,
 		reflect.UnsafePointer:
 		o.Type = objectTypeInvalid
 	}

@@ -284,7 +284,11 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 				sb.WriteString("        content:\n")
 				sb.WriteString("          application/json:\n")
 				sb.WriteString("            schema:\n")
-				sb.WriteString(fmt.Sprintf("              $ref: '#/components/schemas/%s'\n", x.objOrSub(desc.in).Name))
+				if desc.in.Type.IsSimple() {
+					sb.WriteString(fmt.Sprintf("              type: %s\n", desc.in.Type))
+				} else {
+					sb.WriteString(fmt.Sprintf("              $ref: '#/components/schemas/%s'\n", x.objOrSub(desc.in).Name))
+				}
 			}
 			sb.WriteString("      responses:\n")
 			sb.WriteString("        '200':\n")
@@ -293,7 +297,11 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 				sb.WriteString("          content:\n")
 				sb.WriteString("            application/json:\n")
 				sb.WriteString("              schema:\n")
-				sb.WriteString(fmt.Sprintf("                $ref: '#/components/schemas/%s'\n", x.objOrSub(desc.out).Name))
+				if desc.out.Type.IsSimple() {
+					sb.WriteString(fmt.Sprintf("                type: %s\n", desc.out.Type))
+				} else {
+					sb.WriteString(fmt.Sprintf("                $ref: '#/components/schemas/%s'\n", x.objOrSub(desc.out).Name))
+				}
 			}
 		}
 	}

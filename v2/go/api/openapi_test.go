@@ -421,13 +421,13 @@ paths:
 					content:
 						application/json:
 							schema:
-								$ref: '#/components/schemas/string'
+								type: string
 		put:
 			requestBody:
 				content:
 					application/json:
 						schema:
-							$ref: '#/components/schemas/string'
+							type: string
 			responses:
 				'200':
 					description: OK
@@ -436,14 +436,14 @@ paths:
 				content:
 					application/json:
 						schema:
-							$ref: '#/components/schemas/string'
+							type: string
 			responses:
 				'200':
 					description: OK
 					content:
 						application/json:
 							schema:
-								$ref: '#/components/schemas/string'
+								type: string
 		delete:
 			responses:
 				'200':
@@ -451,7 +451,7 @@ paths:
 					content:
 						application/json:
 							schema:
-								$ref: '#/components/schemas/string'`,
+								type: string`,
 	)
 }
 
@@ -692,6 +692,148 @@ paths:
 						application/json:
 							schema:
 								$ref: '#/components/schemas/template_target_object_20'
+	/test/v1/openapi.yaml:
+		get:
+			responses:
+				'200':
+					description: OK`,
+	)
+}
+
+func Test_openapi_directly_simple(t *testing.T) {
+
+	checkOpenAPI(
+		t,
+		&struct {
+			GetOpenAPI        convAPI.OpenAPI            `api:"GET /test/v1/openapi.yaml"`
+			GetDirectlySimple convAPI.InOut[string, int] `api:"GET /test/v1/directly_simple"`
+		}{},
+		`openapi: 3.0.0
+info:
+	title: API
+	version: 1.0.0
+paths:
+	/test/v1/directly_simple:
+		get:
+			requestBody:
+				content:
+					application/json:
+						schema:
+							type: string
+			responses:
+				'200':
+					description: OK
+					content:
+						application/json:
+							schema:
+								type: integer
+	/test/v1/openapi.yaml:
+		get:
+			responses:
+				'200':
+					description: OK`,
+	)
+}
+
+func Test_openapi_interface(t *testing.T) {
+
+	type objectWithAny struct {
+		AnyField any
+		AnyMap   map[string]any
+		AnyArray []any
+	}
+
+	checkOpenAPI(
+		t,
+		&struct {
+			GetOpenAPI       convAPI.OpenAPI                               `api:"GET /test/v1/openapi.yaml"`
+			GetAny           convAPI.InOut[any, any]                       `api:"GET /test/v1/any"`
+			GetObjectWithAny convAPI.InOut[objectWithAny, objectWithAny]   `api:"GET /test/v1/object_with_any"`
+			GetAnyMap        convAPI.InOut[map[string]any, map[string]any] `api:"GET /test/v1/any_map"`
+			GetAnyArray      convAPI.InOut[[]any, []any]                   `api:"GET /test/v1/any_array"`
+		}{},
+		`openapi: 3.0.0
+info:
+	title: API
+	version: 1.0.0
+components:
+	schemas:
+		interface:
+			type: object
+		list_of_interface:
+			type: array
+			items:
+				$ref: '#/components/schemas/interface'
+		map_by_string_of_interface:
+			type: object
+			additionalProperties:
+				$ref: '#/components/schemas/interface'
+		object_with_any:
+			type: object
+			properties:
+				any_array:
+					$ref: '#/components/schemas/list_of_interface'
+				any_field:
+					$ref: '#/components/schemas/interface'
+				any_map:
+					$ref: '#/components/schemas/map_by_string_of_interface'
+paths:
+	/test/v1/any:
+		get:
+			requestBody:
+				content:
+					application/json:
+						schema:
+							$ref: '#/components/schemas/interface'
+			responses:
+				'200':
+					description: OK
+					content:
+						application/json:
+							schema:
+								$ref: '#/components/schemas/interface'
+	/test/v1/any_array:
+		get:
+			requestBody:
+				content:
+					application/json:
+						schema:
+							$ref: '#/components/schemas/list_of_interface'
+			responses:
+				'200':
+					description: OK
+					content:
+						application/json:
+							schema:
+								$ref: '#/components/schemas/list_of_interface'
+	/test/v1/any_map:
+		get:
+			requestBody:
+				content:
+					application/json:
+						schema:
+							$ref: '#/components/schemas/map_by_string_of_interface'
+			responses:
+				'200':
+					description: OK
+					content:
+						application/json:
+							schema:
+								$ref: '#/components/schemas/map_by_string_of_interface'
+	/test/v1/object_with_any:
+		get:
+			requestBody:
+				content:
+					application/json:
+						schema:
+							$ref: '#/components/schemas/object_with_any'
+			responses:
+				'200':
+					description: OK
+					content:
+						application/json:
+							schema:
+								$ref: '#/components/schemas/object_with_any'
 	/test/v1/openapi.yaml:
 		get:
 			responses:
