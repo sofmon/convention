@@ -31,7 +31,7 @@ type whereClosed interface {
 type whereOrdered interface {
 	statement() (string, []any, error)
 
-	Limit(limit int) whereLimited
+	LimitPerShard(limit int) whereLimited
 }
 
 type whereLimited interface {
@@ -309,8 +309,7 @@ func (w *where) OrderByDesc(key string) whereOrdered {
 	return w
 }
 
-// Warming: The limit is applied to each shard separately, so the total number of results may exceed the limit if there are multiple shards.
-func (w *where) Limit(limit int) whereLimited {
+func (w *where) LimitPerShard(limit int) whereLimited {
 	if w.err != nil {
 		return w
 	}

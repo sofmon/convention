@@ -842,6 +842,58 @@ paths:
 	)
 }
 
+func Test_openapi_query_parameters(t *testing.T) {
+
+	checkOpenAPI(
+		t,
+		&struct {
+			GetOpenAPI        convAPI.OpenAPI            `api:"GET /test/v1/openapi.yaml"`
+			GetDirectlySimple convAPI.InOut[string, int] `api:"GET /test/v1/directly_simple/{param1}/?param2=string|some description&param3=integer"`
+		}{},
+		`openapi: 3.0.0
+info:
+	title: API
+	version: 1.0.0
+paths:
+	/test/v1/directly_simple/{param1}:
+		parameters:
+			- name: param1
+				required: true
+				in: path
+				schema:
+					type: string
+			- name: param2
+				required: false
+				in: query
+				schema:
+					type: string
+				description: some description
+			- name: param3
+				required: false
+				in: query
+				schema:
+					type: integer
+		get:
+			requestBody:
+				content:
+					application/json:
+						schema:
+							type: string
+			responses:
+				'200':
+					description: OK
+					content:
+						application/json:
+							schema:
+								type: integer
+	/test/v1/openapi.yaml:
+		get:
+			responses:
+				'200':
+					description: OK`,
+	)
+}
+
 func checkOpenAPI(t *testing.T, api any, expectedOpenAPI string) {
 
 	ctx := convCtx.New(convAuth.Claims{

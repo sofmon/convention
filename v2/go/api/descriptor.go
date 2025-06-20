@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strings"
 	"time"
@@ -11,18 +12,43 @@ import (
 
 func newDescriptor(host string, port int, pattern string, in, out reflect.Type) (desc descriptor) {
 
-	var segmentsSplit []string
+	var (
+		segmentsSplit []string
+	)
 
+	// Extract method
 	methodSplit := strings.Split(pattern, " ")
-
 	hasMethodSpecific := len(methodSplit) > 1 && strings.HasPrefix(methodSplit[1], "/")
-
 	if hasMethodSpecific {
 		desc.method = methodSplit[0]
-		segmentsSplit = strings.Split(strings.Trim(methodSplit[1], "/"), "/")
+		pattern = strings.Join(methodSplit[1:], " ") // restore the pattern without the method
 	} else {
-		segmentsSplit = strings.Split(strings.Trim(pattern, "/"), "/")
+		desc.method = http.MethodGet // Default method if not specified
 	}
+
+	// Extract query parameters
+	querySplit := strings.Split(pattern, "?")
+	if len(querySplit) > 1 {
+		pattern = querySplit[0]
+		// ignore parse errors on purpose as it is only used for openAPI generation
+		values, _ := url.ParseQuery(querySplit[1])
+		for n := range values {
+			split := strings.Split(values.Get(n), "|")
+			t := split[0]
+			d := ""
+			if len(split) > 1 {
+				d = split[1]
+			}
+			desc.query = append(desc.query, queryParam{
+				Name:        n,
+				Type:        objectType(t),
+				Description: d,
+			})
+		}
+	}
+
+	// Split the pattern into segments
+	segmentsSplit = strings.Split(strings.Trim(pattern, "/"), "/")
 
 	weight := 0
 	for i, s := range segmentsSplit {
@@ -57,6 +83,7 @@ type descriptor struct {
 	port     int
 	method   string
 	segments []urlSegment
+	query    []queryParam
 	weight   int
 	open     bool
 
@@ -67,12 +94,12 @@ func (desc *descriptor) path() string {
 	sb := strings.Builder{}
 	for _, segment := range desc.segments {
 		sb.WriteRune('/')
-		if segment.param {
+		if segment.Param {
 			sb.WriteRune('{')
-			sb.WriteString(segment.value)
+			sb.WriteString(segment.Value)
 			sb.WriteRune('}')
 		} else {
-			sb.WriteString(segment.value)
+			sb.WriteString(segment.Value)
 		}
 	}
 	return sb.String()
@@ -80,8 +107,8 @@ func (desc *descriptor) path() string {
 
 func (desc *descriptor) parameters() (params []string) {
 	for _, segment := range desc.segments {
-		if segment.param {
-			params = append(params, segment.value)
+		if segment.Param {
+			params = append(params, segment.Value)
 		}
 	}
 	return
@@ -332,11 +359,11 @@ func (desc *descriptor) match(r *http.Request) (values values, match bool) {
 	}
 
 	for i, segment := range desc.segments {
-		if segment.param {
-			values.Add(segment.value, urlSplit[i])
+		if segment.Param {
+			values.Add(segment.Value, urlSplit[i])
 			continue
 		}
-		if segment.value != urlSplit[i] {
+		if segment.Value != urlSplit[i] {
 			match = false
 			return
 		}
@@ -360,15 +387,15 @@ func (desc *descriptor) newRequest(vls values, body io.Reader) (*http.Request, e
 
 	for i, segment := range desc.segments {
 
-		if segment.param {
+		if segment.Param {
 			val := vls.GetByIndex(vi)
 			if val == "" {
-				return nil, fmt.Errorf("missing value '%s'", segment.value)
+				return nil, fmt.Errorf("missing value '%s'", segment.Value)
 			}
 			sb.WriteString(val)
 			vi++
 		} else {
-			sb.WriteString(segment.value)
+			sb.WriteString(segment.Value)
 		}
 
 		if i < len(desc.segments)-1 {
@@ -380,6 +407,12 @@ func (desc *descriptor) newRequest(vls values, body io.Reader) (*http.Request, e
 }
 
 type urlSegment struct {
-	value string
-	param bool
+	Value string
+	Param bool
+}
+
+type queryParam struct {
+	Name        string
+	Type        objectType
+	Description string
 }

@@ -265,15 +265,26 @@ func (x *OpenAPI) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 		eps := epByPath[path]
 		sb.WriteString(fmt.Sprintf("  %s:\n", path))
 		desc := eps[0].getDescriptor()
-		params := desc.parameters()
-		if len(params) > 0 {
+		urlParams := desc.parameters()
+		fmt.Println("desc.query", desc.query)
+		if len(urlParams)+len(desc.query) > 0 {
 			sb.WriteString("    parameters:\n")
-			for _, p := range desc.parameters() {
+			for _, p := range urlParams {
 				sb.WriteString(fmt.Sprintf("      - name: %s\n", p))
 				sb.WriteString("        required: true\n")
 				sb.WriteString("        in: path\n")
 				sb.WriteString("        schema:\n")
 				sb.WriteString("          type: string\n")
+			}
+			for _, p := range desc.query {
+				sb.WriteString(fmt.Sprintf("      - name: %s\n", p.Name))
+				sb.WriteString("        required: false\n")
+				sb.WriteString("        in: query\n")
+				sb.WriteString("        schema:\n")
+				sb.WriteString(fmt.Sprintf("          type: %s\n", p.Type))
+				if p.Description != "" {
+					sb.WriteString(fmt.Sprintf("        description: %s\n", p.Description))
+				}
 			}
 		}
 		for _, ep := range eps {

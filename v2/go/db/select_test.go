@@ -227,7 +227,7 @@ func Test_order_limit_offset(t *testing.T) {
 			Like().
 			Value("%").
 			OrderByAsc("message_id").
-			Limit(10).
+			LimitPerShard(10).
 			Offset(10),
 	)
 	if err != nil {
