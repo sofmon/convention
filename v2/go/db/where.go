@@ -293,6 +293,38 @@ func (w *where) UpdatedBy(user string) whereExpectingLogicalOperator {
 	return w
 }
 
+func (w *where) OrderByCreatedAtAsc() whereOrdered {
+	if w.err != nil {
+		return w
+	}
+	_, w.err = w.query.WriteString(` ORDER BY "created_at" ASC`)
+	return w
+}
+
+func (w *where) OrderByCreatedAtDesc() whereOrdered {
+	if w.err != nil {
+		return w
+	}
+	_, w.err = w.query.WriteString(` ORDER BY "created_at" DESC`)
+	return w
+}
+
+func (w *where) OrderByUpdatedAtAsc() whereOrdered {
+	if w.err != nil {
+		return w
+	}
+	_, w.err = w.query.WriteString(` ORDER BY "updated_at" ASC`)
+	return w
+}
+
+func (w *where) OrderByUpdatedAtDesc() whereOrdered {
+	if w.err != nil {
+		return w
+	}
+	_, w.err = w.query.WriteString(` ORDER BY "updated_at" DESC`)
+	return w
+}
+
 func (w *where) OrderByAsc(key string) whereOrdered {
 	if w.err != nil {
 		return w
