@@ -28,6 +28,18 @@ type whereClosed interface {
 	statement() (string, []any, error)
 }
 
+type whereOrdered interface {
+	statement() (string, []any, error)
+
+	Limit(limit int) whereLimited
+}
+
+type whereLimited interface {
+	statement() (string, []any, error)
+
+	Offset(offset int) whereClosed
+}
+
 type whereReady interface {
 	statement() (string, []any, error)
 }
@@ -47,7 +59,8 @@ type whereExpectingOperators interface {
 type whereExpectingLogicalOperator interface {
 	Or() whereExpectingFirstStatement
 	And() whereExpectingFirstStatement
-	Limit(limit int) whereClosed
+	OrderByAsc(key string) whereOrdered
+	OrderByDesc(key string) whereOrdered
 
 	statement() (string, []any, error)
 }
@@ -106,23 +119,30 @@ func (w *where) Expression(where whereExpectingLogicalOperator) whereExpectingLo
 	return w
 }
 
+func keyToJsonColumn(key string) string {
+	split := strings.Split(key, ".")
+	if len(split) == 0 {
+		return ""
+	}
+	if len(split) == 1 {
+		return `"object"->'` + split[0] + `'`
+	}
+	var sb strings.Builder
+	sb.WriteString(`"object"`)
+	for _, s := range split {
+		sb.WriteString(`->'` + s + `'`)
+	}
+	return sb.String()
+}
+
 func (w *where) Key(key string) whereExpectingOperators {
 	if w.err != nil {
 		return w
 	}
-	split := strings.Split(key, ".")
-	switch len(split) {
-	case 0:
-		return w
-	case 1:
-		_, w.err = w.query.WriteString(`"object"->'` + split[0] + `'`)
-	default:
-		_, w.err = w.query.WriteString(`"object"`)
-		for _, s := range split {
-			_, w.err = w.query.WriteString(`->'` + s + `'`)
-
-		}
+	if key == "" {
+		w.err = errors.New("key cannot be empty")
 	}
+	_, w.err = w.query.WriteString(keyToJsonColumn(key))
 	return w
 }
 
@@ -273,8 +293,37 @@ func (w *where) UpdatedBy(user string) whereExpectingLogicalOperator {
 	return w
 }
 
-func (w *where) Limit(limit int) whereClosed {
+func (w *where) OrderByAsc(key string) whereOrdered {
+	if w.err != nil {
+		return w
+	}
+	_, w.err = w.query.WriteString(` ORDER BY ` + keyToJsonColumn(key) + ` ASC`)
+	return w
+}
+
+func (w *where) OrderByDesc(key string) whereOrdered {
+	if w.err != nil {
+		return w
+	}
+	_, w.err = w.query.WriteString(` ORDER BY ` + keyToJsonColumn(key) + ` DESC`)
+	return w
+}
+
+// Warming: The limit is applied to each shard separately, so the total number of results may exceed the limit if there are multiple shards.
+func (w *where) Limit(limit int) whereLimited {
+	if w.err != nil {
+		return w
+	}
 	_, w.err = w.query.WriteString(` LIMIT ` + strconv.Itoa(limit))
+	return w
+}
+
+func (w *where) Offset(offset int) whereClosed {
+	if w.err != nil {
+		return w
+	}
+	_, w.err = w.query.WriteString(` OFFSET ` + strconv.Itoa(offset))
+
 	return w
 }
 

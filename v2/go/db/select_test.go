@@ -183,3 +183,66 @@ func Test_select_with_metadata(t *testing.T) {
 	}
 
 }
+
+func Test_order_limit_offset(t *testing.T) {
+
+	ctx := convCtx.New(convAuth.Claims{User: "Test_order_limit_offset"})
+
+	clearMessagesDB(ctx)
+
+	testMessages := generateTestMessages()
+
+	for _, msg := range testMessages {
+		err := messagesDB.Tenant("test").Insert(ctx, msg)
+		if err != nil {
+			t.Fatalf("Insert failed: %v", err)
+		}
+	}
+
+	msg, err := messagesDB.Tenant("test").SelectByID(ctx, testMessages[0].MessageID)
+	if err != nil {
+		t.Fatalf("SelectByID failed: %v", err)
+	}
+
+	if msg == nil {
+		t.Fatalf("SelectByID failed: nil")
+	}
+
+	if msg.Content != testMessages[0].Content {
+		t.Fatalf("Unexpected content: %v", msg.Content)
+	}
+
+	msgs, err := messagesDB.Tenant("test").SelectAll(ctx)
+	if err != nil {
+		t.Fatalf("SelectAll failed: %v", err)
+	}
+
+	if len(msgs) != len(testMessages) {
+		t.Fatalf("Unexpected messages count: %v", len(msgs))
+	}
+
+	msgs, err = messagesDB.Tenant("test").Select(ctx,
+		convDB.Where().
+			Key("message_id").
+			Like().
+			Value("%").
+			OrderByAsc("message_id").
+			Limit(10).
+			Offset(10),
+	)
+	if err != nil {
+		t.Fatalf("Select failed: %v", err)
+	}
+
+	if len(msgs) != 20 { // Note as we have two shards the result is double (the limit is applied to each shard)
+		t.Fatalf("Unexpected messages count: %v", len(msgs))
+	}
+
+	for _, msg := range msgs {
+		err := messagesDB.Tenant("test").Delete(ctx, msg.MessageID)
+		if err != nil {
+			t.Fatalf("Delete failed: %v", err)
+		}
+	}
+
+}
