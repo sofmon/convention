@@ -59,8 +59,13 @@ type whereExpectingOperators interface {
 type whereExpectingLogicalOperator interface {
 	Or() whereExpectingFirstStatement
 	And() whereExpectingFirstStatement
+
 	OrderByAsc(key string) whereOrdered
 	OrderByDesc(key string) whereOrdered
+	OrderByCreatedAtDesc() whereOrdered
+	OrderByCreatedAtAsc() whereOrdered
+	OrderByUpdatedAtDesc() whereOrdered
+	OrderByUpdatedAtAsc() whereOrdered
 
 	statement() (string, []any, error)
 }
