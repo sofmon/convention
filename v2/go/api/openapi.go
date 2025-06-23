@@ -29,8 +29,8 @@ type typeSubstitution struct {
 }
 
 func NewTypeSubstitution[fromT any, toT any]() (ts typeSubstitution) {
-	ts.from = objectFromType(reflect.TypeOf(new(fromT)))
-	ts.to = objectFromType(reflect.TypeOf(new(toT)))
+	ts.from = objectFromType(reflect.TypeOf(new(fromT)), false)
+	ts.to = objectFromType(reflect.TypeOf(new(toT)), false)
 	ts.to.Name = ts.from.Name // keep the name
 	ts.to.ID = ts.from.ID     // keep the ID
 	return
@@ -42,7 +42,7 @@ type enum struct {
 }
 
 func NewEnum[T ~string](values ...T) (e enum) {
-	e.object = objectFromType(reflect.TypeOf(new(T)))
+	e.object = objectFromType(reflect.TypeOf(new(T)), false)
 	e.values = make([]string, len(values))
 	for i, v := range values {
 		e.values[i] = string(v)

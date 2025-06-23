@@ -72,8 +72,8 @@ func newDescriptor(host string, port int, pattern string, in, out reflect.Type) 
 	desc.weight = weight
 	desc.host = host
 	desc.port = port
-	desc.in = objectFromType(in)
-	desc.out = objectFromType(out)
+	desc.in = objectFromType(in, false)
+	desc.out = objectFromType(out, false)
 
 	return
 }
@@ -229,7 +229,7 @@ func simplifyTypeName(name string) string {
 	return name
 }
 
-func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
+func objectFromType(t reflect.Type, optional bool, knownObjects ...*object) (o *object) {
 
 	if t == nil {
 		return nil
@@ -257,31 +257,31 @@ func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
 	switch t.Kind() {
 
 	case reflect.Bool:
-		o.Mandatory = !isPointer
+		o.Mandatory = !optional && !isPointer
 		o.Type = objectTypeBoolean
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		o.Mandatory = !isPointer
+		o.Mandatory = !optional && !isPointer
 		o.Type = objectTypeInteger
 
 	case reflect.Float32, reflect.Float64:
-		o.Mandatory = !isPointer
+		o.Mandatory = !optional && !isPointer
 		o.Type = objectTypeNumber
 
 	case reflect.String:
-		o.Mandatory = !isPointer
+		o.Mandatory = !optional && !isPointer
 		o.Type = objectTypeString
 
 	case reflect.Array, reflect.Slice:
 		o.Mandatory = false // Arrays and slices are optional by default
 		o.Type = objectTypeArray
-		o.Elem = objectFromType(t.Elem(), knownObjects...)
+		o.Elem = objectFromType(t.Elem(), true, knownObjects...)
 
 	case reflect.Map:
 		o.Mandatory = false // Maps are optional by default
 		o.Type = objectTypeMap
-		o.Key, o.Elem = objectFromType(t.Key(), knownObjects...), objectFromType(t.Elem(), knownObjects...)
+		o.Key, o.Elem = objectFromType(t.Key(), false, knownObjects...), objectFromType(t.Elem(), false, knownObjects...)
 
 	case reflect.Struct:
 		o.Mandatory = !isPointer
@@ -301,23 +301,30 @@ func objectFromType(t reflect.Type, knownObjects ...*object) (o *object) {
 				if jsonTag == "-" {
 					continue // Skip fields with json tag "-"
 				}
+				omitEmpty := false
+				if jsonTag != "" {
+					split := strings.Split(jsonTag, ",")
+					jsonTag = split[0] // Get the first part of the json tag
+					for _, tag := range split[1:] {
+						if tag == "omitempty" {
+							omitEmpty = true // Check for omitempty tag
+						}
+					}
+				}
+				if jsonTag == "" {
+					jsonTag = field.Name
+				}
 
 				if field.Anonymous {
 					// If the field is an anonymous struct, we recursively add its fields
-					subObject := objectFromType(field.Type, knownObjects...)
+					subObject := objectFromType(field.Type, omitEmpty, knownObjects...)
 					for subName, subField := range subObject.Fields {
 						o.Fields[subName] = subField
 					}
 					continue
 				}
 
-				if jsonTag != "" {
-					jsonTag = strings.Split(jsonTag, ",")[0]
-				}
-				if jsonTag == "" {
-					jsonTag = field.Name
-				}
-				o.Fields[jsonTag] = objectFromType(field.Type, knownObjects...)
+				o.Fields[jsonTag] = objectFromType(field.Type, omitEmpty, knownObjects...)
 			}
 		}
 

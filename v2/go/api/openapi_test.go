@@ -894,6 +894,57 @@ paths:
 	)
 }
 
+func Test_openapi_omitempty(t *testing.T) {
+
+	type input struct {
+		StringField string `json:"string_field,omitempty"`
+		IntField    int    `json:"int_field"`
+	}
+
+	checkOpenAPI(
+		t,
+		&struct {
+			GetOpenAPI        convAPI.OpenAPI           `api:"GET /test/v1/openapi.yaml"`
+			GetDirectlySimple convAPI.InOut[input, int] `api:"GET /test/v1/directly_simple"`
+		}{},
+		`openapi: 3.0.0
+info:
+	title: API
+	version: 1.0.0
+components:
+	schemas:
+		input:
+			type: object
+			properties:
+				int_field:
+					type: integer
+				string_field:
+					type: string
+			required:
+				- int_field
+paths:
+	/test/v1/directly_simple:
+		get:
+			requestBody:
+				content:
+					application/json:
+						schema:
+							$ref: '#/components/schemas/input'
+			responses:
+				'200':
+					description: OK
+					content:
+						application/json:
+							schema:
+								type: integer
+	/test/v1/openapi.yaml:
+		get:
+			responses:
+				'200':
+					description: OK`,
+	)
+}
+
 func checkOpenAPI(t *testing.T, api any, expectedOpenAPI string) {
 
 	ctx := convCtx.New(convAuth.Claims{
