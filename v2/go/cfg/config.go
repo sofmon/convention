@@ -9,7 +9,7 @@ import (
 
 type ConfigKey string
 
-var configLocation = "/etc/app/"
+var configLocation = "/etc/agent/"
 
 func SetConfigLocation(folder string) error {
 	fi, err := os.Stat(folder)
