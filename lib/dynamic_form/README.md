@@ -1,0 +1,475 @@
+# DynamicFormWidget
+
+DynamicFormWidget is a Flutter widget that automatically creates view and edit UIs from Map data. Define your data as `Map<String, dynamic>`, configure fields with `FieldConfig`, and get fully functional form interfaces with zero boilerplate.
+
+## Features
+
+- **Map-Based**: Works with `Map<String, dynamic>` - no code generation required
+- **Type Inference**: Automatically infers field types from values
+- **Type-Safe**: Explicit type specification available when needed
+- **Extensible**: Custom field widgets via widget builders
+- **Zero Boilerplate**: Minimal configuration needed
+- **Built-in Widgets**: Default implementations for all common types
+- **Validation**: Built-in validation with custom error messages
+- **Mode Switching**: Seamlessly switch between view and edit modes
+- **Nested Fields**: Support for dot notation paths (e.g., "user.address.street")
+
+## Quick Start
+
+### 1. Add Dependencies
+
+```yaml
+# pubspec.yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  intl: ^0.19.0  # For date formatting
+```
+
+### 2. Define Your Data
+
+```dart
+import 'package:convention/builder/schema.dart';
+
+final userProfile = {
+  'name': 'John Doe',
+  'email': 'john@example.com',
+  'age': 30,
+  'isActive': true,
+};
+```
+
+### 3. Configure Fields
+
+```dart
+final fieldConfigs = {
+  'name': const FieldConfig(
+    label: 'Full Name',
+    hint: 'Enter your full name',
+    // Type inferred from value (String)
+  ),
+  'email': const FieldConfig(
+    label: 'Email Address',
+    hint: 'Enter your email',
+    // Type inferred from value (String)
+  ),
+  'age': const FieldConfig(
+    label: 'Age',
+    type: FieldType.int,  // Explicitly specified
+  ),
+  'isActive': const FieldConfig(
+    label: 'Active',
+    // Type inferred from value (bool)
+  ),
+};
+```
+
+### 4. Use DynamicFormWidget
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:convention/builder/main.dart';
+import 'package:convention/builder/field_widget.dart';
+
+class ProfileScreen extends StatefulWidget {
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final _formKey = GlobalKey<DynamicFormWidgetState>();
+  var _mode = AutoWidgetMode.view;
+
+  Map<String, dynamic> _profile = {
+    'name': 'John Doe',
+    'email': 'john@example.com',
+    'age': 30,
+    'isActive': true,
+  };
+
+  final _fieldConfigs = {
+    'name': const FieldConfig(label: 'Name'),
+    'email': const FieldConfig(label: 'Email'),
+    'age': const FieldConfig(label: 'Age', type: FieldType.int),
+    'isActive': const FieldConfig(label: 'Active'),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Profile'),
+        actions: [
+          if (_mode == AutoWidgetMode.view)
+            IconButton(
+              icon: Icon(Icons.edit),
+              onPressed: () => setState(() => _mode = AutoWidgetMode.edit),
+            )
+          else
+            IconButton(
+              icon: Icon(Icons.save),
+              onPressed: _saveProfile,
+            ),
+        ],
+      ),
+      body: Padding(
+        padding: EdgeInsets.all(16),
+        child: DynamicFormWidget(
+          key: _formKey,
+          value: _profile,
+          fieldConfigs: _fieldConfigs,
+          mode: _mode,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveProfile() async {
+    try {
+      final updated = await _formKey.currentState!.save();
+      setState(() {
+        _profile = updated;
+        _mode = AutoWidgetMode.view;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Validation failed: $e')),
+      );
+    }
+  }
+}
+```
+
+## Supported Field Types
+
+DynamicFormWidget provides default widgets for these types:
+
+| FieldType | View Widget | Edit Widget |
+|-----------|-------------|-------------|
+| `string` | Text | TextFormField |
+| `int` | Text | TextFormField (numeric) |
+| `double` | Text | TextFormField (decimal) |
+| `bool` | Icon (check/cancel) | Switch |
+| `dateTime` | Formatted text | DatePicker + TimePicker |
+| `enumType` | Enum name | DropdownButtonFormField |
+| `list` | Bullet list | List with add/remove |
+| `nested` | Nested display | Nested form fields |
+
+## Type Inference
+
+One of the key features is automatic type inference. If you don't specify a `type` in `FieldConfig`, the widget will infer it from the value:
+
+```dart
+// Type is inferred as FieldType.string
+'name': const FieldConfig(label: 'Name'),
+
+// Type is explicitly set
+'age': const FieldConfig(label: 'Age', type: FieldType.int),
+```
+
+Inference works for:
+- `String` → `FieldType.string`
+- `int` → `FieldType.int`
+- `double` → `FieldType.double`
+- `bool` → `FieldType.bool`
+- `DateTime` → `FieldType.dateTime`
+- `List` → `FieldType.list`
+- `Map` → `FieldType.nested`
+
+For enums, you must specify the type explicitly and provide `enumValues`.
+
+## Customization
+
+### Custom Labels and Hints
+
+```dart
+final fieldConfigs = {
+  'name': const FieldConfig(
+    label: 'Product Name',
+    hint: 'Enter the product name',
+    required: true,
+  ),
+  'price': const FieldConfig(
+    label: 'Price (USD)',
+    hint: 'Enter price in dollars',
+    type: FieldType.double,
+    validationError: 'Price must be specified',
+  ),
+};
+```
+
+### Custom Field Widgets
+
+Use the `widget` parameter to provide a custom widget builder:
+
+```dart
+final fieldConfigs = {
+  'phoneNumber': FieldConfig(
+    label: 'Phone Number',
+    widget: (context, value, onChanged, mode) {
+      if (mode == AutoWidgetMode.view) {
+        return Text(value ?? '—');
+      }
+      return TextFormField(
+        initialValue: value,
+        decoration: InputDecoration(
+          labelText: 'Phone Number',
+          hintText: 'Enter phone number',
+        ),
+        onChanged: onChanged,
+        keyboardType: TextInputType.phone,
+      );
+    },
+  ),
+};
+```
+
+### Nested Fields with Dot Notation
+
+Support for nested objects using dot notation:
+
+```dart
+final data = {
+  'user': {
+    'address': {
+      'street': '123 Main St',
+      'city': 'Springfield',
+    },
+  },
+};
+
+final fieldConfigs = {
+  'user.address.street': const FieldConfig(label: 'Street'),
+  'user.address.city': const FieldConfig(label: 'City'),
+};
+```
+
+### Enum Fields
+
+```dart
+enum AccountType { free, premium, enterprise }
+
+final data = {
+  'accountType': AccountType.premium,
+};
+
+final fieldConfigs = {
+  'accountType': FieldConfig(
+    label: 'Account Type',
+    type: FieldType.enumType,
+    enumValues: AccountType.values,
+  ),
+};
+```
+
+### Custom Layout
+
+```dart
+DynamicFormWidget(
+  value: profile,
+  fieldConfigs: fieldConfigs,
+  mode: AutoWidgetMode.edit,
+  layoutBuilder: (context, fieldWidgets) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(child: fieldWidgets[0]),
+            SizedBox(width: 16),
+            Expanded(child: fieldWidgets[1]),
+          ],
+        ),
+        ...fieldWidgets.skip(2),
+      ],
+    );
+  },
+)
+```
+
+## Validation
+
+DynamicFormWidget provides automatic validation:
+
+1. **Required Fields**: Fields with `required: true` are validated
+2. **Type Validation**: Numeric fields validate input format
+3. **Custom Validation**: Add custom validators via `validationError`
+
+```dart
+final fieldConfigs = {
+  'email': const FieldConfig(
+    label: 'Email',
+    required: true,
+    validationError: 'Email is required',
+  ),
+  'bio': const FieldConfig(
+    label: 'Bio',
+    required: false,
+  ),
+};
+```
+
+Validation occurs when calling `save()`:
+
+```dart
+try {
+  final updated = await formKey.currentState!.save();
+  // Success - use updated Map
+} on ValidationException catch (e) {
+  // Handle validation errors
+  print('Validation errors: ${e.errors}');
+}
+```
+
+## API Reference
+
+### DynamicFormWidget
+
+```dart
+DynamicFormWidget({
+  Key? key,
+  required Map<String, dynamic> value,           // The data to display/edit
+  required Map<String, FieldConfig> fieldConfigs, // Field configurations
+  AutoWidgetMode mode = view,                     // view or edit mode
+  Function(Map<String, dynamic>)? onChanged,      // Called when value changes
+  Widget Function(...)? layoutBuilder,            // Custom layout
+})
+```
+
+### DynamicFormWidgetState
+
+```dart
+class DynamicFormWidgetState {
+  Future<Map<String, dynamic>> save();   // Validates and returns updated Map
+  ValidationResult validate();           // Validates without saving
+  void reset();                          // Resets to original values
+}
+```
+
+### FieldConfig
+
+```dart
+class FieldConfig {
+  final String label;                    // Display label
+  final FieldType? type;                 // Field type (null = infer from value)
+  final bool required;                   // Whether field is required
+  final String? hint;                    // Hint text for edit mode
+  final String? validationError;         // Custom validation error message
+  final List<dynamic>? enumValues;       // For enum fields
+  final Map<String, FieldConfig>? nestedFields;  // For nested objects
+  final Widget Function(...)? widget;    // Custom widget builder
+}
+```
+
+### FieldType Enum
+
+```dart
+enum FieldType {
+  string,
+  int,
+  double,
+  bool,
+  dateTime,
+  enumType,
+  list,
+  nested,
+}
+```
+
+## Examples
+
+See [example/](example/) directory for complete working examples:
+
+- `models.dart` - Sample enum types
+- `example_app.dart` - Full Flutter app demonstrating usage
+
+Run the example:
+
+```bash
+flutter run lib/util/builder/example/example_app.dart
+```
+
+## Best Practices
+
+1. **Use Type Inference**: Let the widget infer types when possible
+2. **Explicit Types for Ambiguity**: Use explicit types for enums, numbers that could be int or double
+3. **Meaningful Labels**: Provide clear labels for better UX
+4. **Validate Early**: Test validation logic as you build forms
+5. **Custom Widgets Sparingly**: Use only when default widgets don't fit
+
+## Architecture
+
+DynamicFormWidget follows a clean, runtime-based architecture:
+
+1. **Schema Layer** (`schema.dart`): `FieldConfig` and `FieldType` definitions
+2. **Widget Layer** (`main.dart`): Core `DynamicFormWidget` implementation
+3. **Field Widgets** (`field_widgets/`): Type-specific UI components
+
+No code generation is needed - everything works at runtime using reflection-free Map access and type inference.
+
+## Migration from AutoWidgetBuilder
+
+If you were using the old `AutoWidgetBuilder<T>` with code generation:
+
+**Before** (with code generation):
+```dart
+@AutoFormModel()
+class UserProfile {
+  final String name;
+  final int age;
+  const UserProfile({required this.name, required this.age});
+}
+
+// Required: flutter pub run build_runner build
+
+AutoWidgetBuilder<UserProfile>(
+  value: UserProfile(name: 'John', age: 30),
+  mode: AutoWidgetMode.edit,
+)
+```
+
+**After** (Map-based, no code generation):
+```dart
+final userProfile = {
+  'name': 'John',
+  'age': 30,
+};
+
+final fieldConfigs = {
+  'name': const FieldConfig(label: 'Name'),
+  'age': const FieldConfig(label: 'Age', type: FieldType.int),
+};
+
+DynamicFormWidget(
+  value: userProfile,
+  fieldConfigs: fieldConfigs,
+  mode: AutoWidgetMode.edit,
+)
+```
+
+Benefits:
+- No code generation step
+- No tree-shaking issues
+- Simpler, more flexible
+- Runtime type inference
+- Easier to debug
+
+## Version History
+
+### v2.0.0 (2025-01-25)
+- **BREAKING**: Complete refactor from code generation to Map-based approach
+- Removed `@AutoFormModel` annotation and code generation
+- Renamed `AutoWidgetBuilder<T>` to `DynamicFormWidget`
+- Added type inference from runtime values
+- Added support for custom widget builders via `FieldConfig.widget`
+- Added dot notation support for nested fields
+- Simplified API and removed tree-shaking complexity
+
+### v1.0.0 (2025-01-25)
+- Initial implementation with code generation
+- Support for primitive types, DateTime, enum, List, nested objects
+- Custom field widgets via `@UseWidget`
+- Field configuration via `@FieldConfig`
+
+## License
+
+Part of the ingreed project.

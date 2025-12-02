@@ -1,5 +1,7 @@
 # Convention/v2
 
+> **Convention/v1** is deprecated, please move to **[convention/lib](/lib/)**.
+
 ## Purpose and Scope
 
 This document outlines the **convention/v2** standards, targeting containerized environments and supporting multi-tenant, multi-entity architectures.

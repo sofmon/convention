@@ -41,8 +41,7 @@ func WrapContext(parent context.Context, claims convAuth.Claims) (ctx Context) {
 	ctx.Context = context.WithValue(ctx.Context, contextKeyAgentClaims, claims)
 	ctx.Context = context.WithValue(ctx.Context, contextKeyClaims, claims)
 	ctx.Context = context.WithValue(ctx.Context, contextKeyWorkflow, Workflow(uuid.NewString()))
-
-	ctx = ctx.WithScope(string(agent)) // Use agent name as the initial scope
+	ctx.Context = context.WithValue(ctx.Context, contextKeyScope, string(agent))
 
 	return
 }
