@@ -70,6 +70,21 @@ typedef FieldWidgetBuilder<T> = Widget Function({
   String? validationError,
 });
 
+/// Builder function for creating custom default field widgets by type.
+/// Used by DynamicFormTheme to provide project-wide custom widget implementations.
+typedef DynamicFormFieldBuilder = Widget Function({
+  required String label,
+  required dynamic value,
+  required AutoWidgetMode mode,
+  required ValueChanged<dynamic> onChanged,
+  bool required,
+  String? hint,
+  String? validationError,
+  List<dynamic>? enumValues,
+  dynamic nestedFields,
+  GlobalKey<FormFieldState>? fieldKey,
+});
+
 /// Result of validation
 class ValidationResult {
   final bool isValid;

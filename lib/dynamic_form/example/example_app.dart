@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../field_widget.dart';
 import '../schema.dart';
+import '../theme.dart';
 import 'models.dart';
 
 /// Example Flutter app demonstrating DynamicFormWidget usage
@@ -12,6 +13,8 @@ import 'models.dart';
 /// 3. Edit field values
 /// 4. Save and retrieve the updated Map
 /// 5. Use type inference and custom field configurations
+/// 6. Use DynamicFormTheme for custom default widgets
+/// 7. Use auto-labeling with labelResolver
 ///
 /// Run this with: flutter run lib/util/builder/example/example_app.dart
 void main() {
@@ -26,8 +29,90 @@ class DynamicFormWidgetExampleApp extends StatelessWidget {
     return MaterialApp(
       title: 'DynamicFormWidget Example',
       theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
-      home: const ExampleHomePage(),
+      // Wrap app with DynamicFormTheme for project-wide customizations
+      home: DynamicFormTheme(
+        // Custom widget builders by type (Feature 1)
+        builders: {
+          FieldType.bool: _buildCustomBoolWidget,
+        },
+        // Project-wide label resolver (Feature 2)
+        labelResolver: _projectLabelResolver,
+        child: const ExampleHomePage(),
+      ),
     );
+  }
+
+  /// Custom bool widget with a more descriptive display
+  static Widget _buildCustomBoolWidget({
+    required String label,
+    required dynamic value,
+    required AutoWidgetMode mode,
+    required ValueChanged<dynamic> onChanged,
+    bool required = true,
+    String? hint,
+    String? validationError,
+    List<dynamic>? enumValues,
+    dynamic nestedFields,
+    GlobalKey<FormFieldState>? fieldKey,
+  }) {
+    final boolValue = value as bool?;
+
+    if (mode == AutoWidgetMode.view) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: boolValue == true ? Colors.green.shade100 : Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              boolValue == true ? 'Active' : 'Inactive',
+              style: TextStyle(
+                color: boolValue == true ? Colors.green.shade800 : Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        const SizedBox(height: 4),
+        SwitchListTile(
+          value: boolValue ?? false,
+          onChanged: onChanged,
+          title: Text(boolValue == true ? 'Active' : 'Inactive'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ],
+    );
+  }
+
+  /// Simulated ARB-style label resolver
+  /// In a real app, this would use AppLocalizations.of(context)
+  static String? _projectLabelResolver(String fieldNameSnakeCase) {
+    // Simulate ARB resource lookup
+    const labels = {
+      'id': 'User ID',
+      'name': 'Full Name',
+      'email': 'Email Address',
+      'age': 'Age (years)',
+      'is_active': 'Active Status',
+      'account_type': 'Account Type',
+      // Auto-labeling example fields
+      'first_name': 'First Name',
+      'last_name': 'Last Name',
+      'phone_number': 'Phone Number',
+    };
+    return labels[fieldNameSnakeCase];
   }
 }
 
@@ -49,34 +134,35 @@ class _ExampleHomePageState extends State<ExampleHomePage> {
     'accountType': AccountType.premium,
   };
 
-  // Field configurations
+  // Field configurations - demonstrating auto-labeling
+  // Labels are resolved via: FieldConfig.label > widget.labelResolver > theme.labelResolver > humanize
   final Map<String, FieldConfig> _fieldConfigs = {
     'id': const FieldConfig(
-      label: 'User ID',
+      // No label - will use theme.labelResolver ('id' -> 'User ID')
       type: FieldType.string,
       required: false,
     ),
     'name': const FieldConfig(
-      label: 'Full Name',
+      // No label - will use theme.labelResolver ('name' -> 'Full Name')
       hint: 'Enter your full name',
       // type is inferred from value (String)
     ),
     'email': const FieldConfig(
-      label: 'Email Address',
+      // No label - will use theme.labelResolver ('email' -> 'Email Address')
       hint: 'Enter your email',
       // type is inferred from value (String)
     ),
     'age': const FieldConfig(
-      label: 'Age',
+      // No label - will use theme.labelResolver ('age' -> 'Age (years)')
       hint: 'Enter your age',
       type: FieldType.int, // Explicitly specified
     ),
     'isActive': const FieldConfig(
-      label: 'Active Status',
-      // type is inferred from value (bool)
+      // No label - will use theme.labelResolver ('is_active' -> 'Active Status')
+      // Uses custom bool widget from DynamicFormTheme.builders
     ),
     'accountType': FieldConfig(
-      label: 'Account Type',
+      // No label - will use theme.labelResolver ('account_type' -> 'Account Type')
       type: FieldType.enumType,
       enumValues: AccountType.values,
     ),
@@ -211,8 +297,12 @@ class _ExampleHomePageState extends State<ExampleHomePage> {
                       'Features:\n'
                       '• Type inference (name, email, isActive)\n'
                       '• Explicit types (age: int, accountType: enum)\n'
-                      '• Custom hints and labels\n'
-                      '• Map-based data (no code generation needed)',
+                      '• Custom hints\n'
+                      '• Map-based data (no code generation needed)\n\n'
+                      'New Features:\n'
+                      '• Auto-labeling via labelResolver\n'
+                      '• Custom default widgets via DynamicFormTheme\n'
+                      '• isActive uses custom bool widget from theme',
                       style: TextStyle(fontSize: 12),
                     ),
                   ],

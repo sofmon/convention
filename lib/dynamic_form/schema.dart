@@ -1,6 +1,44 @@
 import 'package:flutter/material.dart';
 import 'field_widget.dart';
 
+/// Resolves a label for the given field name (in snake_case).
+/// Return null to fall back to humanized field name.
+typedef LabelResolver = String? Function(String fieldNameSnakeCase);
+
+/// Converts camelCase/PascalCase to snake_case.
+/// For dot notation paths, uses only the last segment.
+///
+/// Examples:
+/// - "userName" → "user_name"
+/// - "firstName" → "first_name"
+/// - "user.address.streetName" → "street_name"
+String toSnakeCase(String input) {
+  // Handle dot notation: take only the last part
+  final fieldName = input.contains('.') ? input.split('.').last : input;
+
+  // Convert camelCase to snake_case
+  return fieldName
+      .replaceAllMapped(
+        RegExp(r'[A-Z]'),
+        (match) => '_${match.group(0)!.toLowerCase()}',
+      )
+      .replaceAll(RegExp(r'^_'), ''); // Remove leading underscore
+}
+
+/// Humanizes snake_case to title case with spaces.
+///
+/// Examples:
+/// - "user_name" → "User Name"
+/// - "first_name" → "First Name"
+/// - "is_active" → "Is Active"
+String humanizeFieldName(String snakeCase) {
+  return snakeCase
+      .split('_')
+      .map((word) =>
+          word.isEmpty ? '' : '${word[0].toUpperCase()}${word.substring(1)}')
+      .join(' ');
+}
+
 /// Field types supported by DynamicFormWidget
 enum FieldType {
   string,
@@ -18,8 +56,9 @@ enum FieldType {
 /// Fields can be specified with a path using dot notation for nested objects,
 /// e.g., "user.address.street"
 class FieldConfig {
-  /// Display label for the field
-  final String label;
+  /// Display label for the field.
+  /// If null, label will be resolved automatically via LabelResolver or humanized field name.
+  final String? label;
 
   /// The field type - if null, will be inferred from the value
   final FieldType? type;
@@ -55,7 +94,7 @@ class FieldConfig {
 
   /// Creates a field configuration
   const FieldConfig({
-    required this.label,
+    this.label,
     this.type,
     this.required = true,
     this.hint,

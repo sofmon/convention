@@ -2,9 +2,9 @@
 
 ## Current Implementation Status
 
-**Status**: ✅ IMPLEMENTED (v2.0.0 - 2025-01-25)
+**Status**: ✅ IMPLEMENTED (v2.1.0 - 2025-12-04)
 **Architecture**: Map-based runtime system (no code generation)
-**Breaking Changes**: Complete refactor from v1.0.0
+**Latest Features**: Custom default widgets, auto-labeling
 
 ---
 
@@ -12,7 +12,10 @@
 
 DynamicFormWidget is a Flutter widget that generates view and edit UIs from `Map<String, dynamic>` data structures. Unlike traditional form builders that require typed models and code generation, this system works entirely at runtime using type inference and explicit configuration.
 
-**Key Innovation**: No code generation, no reflection, no tree-shaking issues. Pure runtime operation.
+**Key Innovations**:
+- No code generation, no reflection, no tree-shaking issues
+- Custom default widgets per FieldType via `DynamicFormTheme`
+- Auto-labeling via `LabelResolver` with ARB resource support
 
 ---
 
@@ -25,7 +28,13 @@ DynamicFormWidget is a Flutter widget that generates view and edit UIs from `Map
 - Suffered from tree-shaking issues on web
 - Complex setup and maintenance
 
-### v2.0.0 (Current)
+### v2.1.0 (Current)
+- Custom default widgets via `DynamicFormTheme`
+- Auto-labeling via `LabelResolver`
+- Optional `FieldConfig.label` (auto-resolved if null)
+- Project-wide configuration through InheritedWidget
+
+### v2.0.0
 - Uses `Map<String, dynamic>` data
 - No annotations required
 - No code generation required
@@ -77,8 +86,11 @@ enum FieldType {
   string, int, double, bool, dateTime, enumType, list, nested
 }
 
+/// Resolves a label for the given field name (in snake_case).
+typedef LabelResolver = String? Function(String fieldNameSnakeCase);
+
 class FieldConfig {
-  final String label;
+  final String? label;                // null = auto-resolve via LabelResolver
   final FieldType? type;              // null = infer from value
   final bool required;
   final String? hint;
@@ -87,6 +99,10 @@ class FieldConfig {
   final Map<String, FieldConfig>? nestedFields;  // for nested objects
   final Widget Function(...)? widget;  // custom widget builder
 }
+
+/// Helper functions
+String toSnakeCase(String input);       // "firstName" -> "first_name"
+String humanizeFieldName(String snake); // "first_name" -> "First Name"
 ```
 
 **Type Inference Algorithm**:
@@ -261,17 +277,18 @@ for (final part in parts) {
 ## File Structure
 
 ```
-lib/util/builder/
+lib/dynamic_form/
 ├── AGENTS.md                          # This file
 ├── README.md                          # User documentation
 ├── main.dart                          # DynamicFormWidget
-├── schema.dart                        # FieldConfig, FieldType
-├── field_widget.dart                  # AutoWidgetMode, ValidationResult
+├── schema.dart                        # FieldConfig, FieldType, LabelResolver
+├── field_widget.dart                  # AutoWidgetMode, ValidationResult, DynamicFormFieldBuilder
+├── theme.dart                         # DynamicFormTheme (NEW in v2.1.0)
 ├── field_widgets/
 │   └── default_field_widgets.dart     # Default field implementations
 └── example/
     ├── models.dart                    # Example enums (no annotations)
-    └── example_app.dart               # Demo app
+    └── example_app.dart               # Demo app with theme and auto-labeling
 
 # Removed in v2.0.0:
 # ❌ annotations.dart
@@ -542,17 +559,60 @@ Else:
 
 ## Extension Points
 
-### 1. Custom Field Widgets
+### 1. Custom Field Widgets (Per-Field)
 
 Use `widget` parameter in FieldConfig:
 ```dart
 FieldConfig(
-  label: 'Custom',
   widget: (context, value, onChanged, mode) => MyWidget(),
 )
 ```
 
-### 2. Custom Layout
+### 2. Custom Default Widgets (Per-Type) - NEW in v2.1.0
+
+Use `DynamicFormTheme` to replace default widgets for specific types:
+```dart
+DynamicFormTheme(
+  builders: {
+    FieldType.bool: ({required label, required value, required mode, required onChanged, ...}) {
+      return MySwitchWidget(label: label, value: value, onChanged: onChanged);
+    },
+    FieldType.dateTime: ({required label, ...}) => MyDatePicker(...),
+  },
+  child: MyApp(),
+)
+```
+
+**Widget Priority Order**:
+1. `FieldConfig.widget` (per-field) - HIGHEST
+2. `DynamicFormTheme.builders[type]` (custom default by type)
+3. Built-in default widget - LOWEST
+
+### 3. Auto-Labeling - NEW in v2.1.0
+
+Use `LabelResolver` for automatic label resolution:
+```dart
+// Widget-level
+DynamicFormWidget(
+  labelResolver: (fieldNameSnakeCase) {
+    return myArbLookup('form_$fieldNameSnakeCase');
+  },
+)
+
+// Project-wide via theme
+DynamicFormTheme(
+  labelResolver: (fieldNameSnakeCase) => myArbLookup(fieldNameSnakeCase),
+  child: MyApp(),
+)
+```
+
+**Label Resolution Order**:
+1. `FieldConfig.label` (explicit)
+2. `DynamicFormWidget.labelResolver`
+3. `DynamicFormTheme.labelResolver`
+4. Humanized field name (`firstName` → `First Name`)
+
+### 4. Custom Layout
 
 Use `layoutBuilder` parameter:
 ```dart
@@ -566,7 +626,7 @@ DynamicFormWidget(
 )
 ```
 
-### 3. Custom Field Types
+### 5. Custom Field Types
 
 Extend `FieldType` enum and `buildWidgetByType` switch:
 ```dart
@@ -581,7 +641,7 @@ case FieldType.richText:
   return _buildRichTextField(...);
 ```
 
-### 4. Formatters and Transformers
+### 6. Formatters and Transformers
 
 Wrap custom widget logic:
 ```dart
@@ -855,6 +915,22 @@ None (no code generation in v2.0.0)
 ---
 
 ## Version History
+
+### v2.1.0 (2025-12-04) - Custom Default Widgets & Auto-Labeling
+**Features**:
+- Added `DynamicFormTheme` InheritedWidget for project-wide customization
+- Custom default widget builders per `FieldType` via `DynamicFormTheme.builders`
+- Auto-labeling with `LabelResolver` (widget-level and theme-level)
+- Made `FieldConfig.label` optional (nullable)
+- Added `toSnakeCase()` and `humanizeFieldName()` helper functions
+- Added `DynamicFormFieldBuilder` typedef
+
+**New Files**:
+- `theme.dart` - DynamicFormTheme InheritedWidget
+
+**API Changes**:
+- `FieldConfig.label` is now optional
+- `DynamicFormWidget` has new `labelResolver` parameter
 
 ### v2.0.0 (2025-01-25) - Map-Based Refactor
 **BREAKING CHANGES**:

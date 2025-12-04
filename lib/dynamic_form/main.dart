@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'field_widget.dart';
 import 'schema.dart';
+import 'theme.dart';
 import 'field_widgets/default_field_widgets.dart';
 
 /// A widget that generates dynamic view and edit UIs from Map data.
@@ -47,6 +48,11 @@ class DynamicFormWidget extends StatefulWidget {
   /// Custom layout builder (optional)
   final Widget Function(BuildContext context, List<Widget> fieldWidgets)? layoutBuilder;
 
+  /// Optional label resolver for this widget.
+  /// Takes precedence over DynamicFormTheme.labelResolver.
+  /// Called with the snake_case field name. Return null to fall back to humanized name.
+  final LabelResolver? labelResolver;
+
   const DynamicFormWidget({
     Key? key,
     required this.value,
@@ -54,6 +60,7 @@ class DynamicFormWidget extends StatefulWidget {
     this.mode = AutoWidgetMode.view,
     this.onChanged,
     this.layoutBuilder,
+    this.labelResolver,
   }) : super(key: key);
 
   @override
@@ -133,6 +140,41 @@ class DynamicFormWidgetState extends State<DynamicFormWidget> {
     }
   }
 
+  /// Resolves the label for a field using the priority chain:
+  /// 1. FieldConfig.label (explicit)
+  /// 2. widget.labelResolver (per-widget)
+  /// 3. DynamicFormTheme.labelResolver (project-wide)
+  /// 4. Humanized snake_case fallback
+  String _resolveLabel(String fieldPath, FieldConfig config) {
+    // 1. Explicit label in config takes highest priority
+    if (config.label != null) {
+      return config.label!;
+    }
+
+    // Convert field path to snake_case for resolver
+    final snakeCaseName = toSnakeCase(fieldPath);
+
+    // 2. Widget-level labelResolver
+    if (widget.labelResolver != null) {
+      final resolved = widget.labelResolver!(snakeCaseName);
+      if (resolved != null) {
+        return resolved;
+      }
+    }
+
+    // 3. Theme-level labelResolver
+    final theme = DynamicFormTheme.of(context);
+    if (theme?.labelResolver != null) {
+      final resolved = theme!.labelResolver!(snakeCaseName);
+      if (resolved != null) {
+        return resolved;
+      }
+    }
+
+    // 4. Fallback: humanize snake_case field name
+    return humanizeFieldName(snakeCaseName);
+  }
+
   /// Validates all fields and returns a ValidationResult
   ValidationResult validate() {
     final errors = <String, String>{};
@@ -141,10 +183,11 @@ class DynamicFormWidgetState extends State<DynamicFormWidget> {
       final fieldPath = entry.key;
       final config = entry.value;
       final value = _getValueByPath(fieldPath);
+      final label = _resolveLabel(fieldPath, config);
 
       // Check required fields
       if (config.required && value == null) {
-        errors[fieldPath] = config.validationError ?? '${config.label} is required';
+        errors[fieldPath] = config.validationError ?? '$label is required';
       }
 
       // Check FormField validation if present
@@ -228,8 +271,9 @@ class DynamicFormWidgetState extends State<DynamicFormWidget> {
   Widget _buildFieldWidget(String fieldPath, FieldConfig config) {
     final value = _getValueByPath(fieldPath);
     final error = _validationErrors[fieldPath];
+    final label = _resolveLabel(fieldPath, config);
 
-    // Use custom widget if provided
+    // Priority 1: Use custom widget if provided in FieldConfig (highest priority)
     if (config.widget != null) {
       return _wrapWithPadding(
         config.widget!(
@@ -248,17 +292,38 @@ class DynamicFormWidgetState extends State<DynamicFormWidget> {
       // Cannot determine type
       return _wrapWithPadding(
         Text(
-          'Unknown field type for "${config.label}"',
+          'Unknown field type for "$label"',
           style: TextStyle(color: Colors.red),
         ),
       );
     }
 
-    // Build default widget based on type
+    // Priority 2: Check for custom builder from DynamicFormTheme
+    final theme = DynamicFormTheme.of(context);
+    final customBuilder = theme?.builderFor(effectiveType);
+
+    if (customBuilder != null) {
+      return _wrapWithPadding(
+        customBuilder(
+          label: label,
+          value: value,
+          mode: widget.mode,
+          onChanged: (newValue) => _onFieldChanged(fieldPath, newValue),
+          required: config.required,
+          hint: config.hint,
+          validationError: error ?? config.validationError,
+          enumValues: config.enumValues,
+          nestedFields: config.nestedFields,
+          fieldKey: _getFieldKey(fieldPath),
+        ),
+      );
+    }
+
+    // Priority 3: Fall back to default widget based on type (lowest priority)
     return _wrapWithPadding(
       DefaultFieldWidgets.buildWidgetByType(
         type: effectiveType,
-        label: config.label,
+        label: label,
         value: value,
         mode: widget.mode,
         onChanged: (newValue) => _onFieldChanged(fieldPath, newValue),

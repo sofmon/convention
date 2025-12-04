@@ -13,6 +13,8 @@ DynamicFormWidget is a Flutter widget that automatically creates view and edit U
 - **Validation**: Built-in validation with custom error messages
 - **Mode Switching**: Seamlessly switch between view and edit modes
 - **Nested Fields**: Support for dot notation paths (e.g., "user.address.street")
+- **Custom Default Widgets**: Replace default widgets per type via `DynamicFormTheme`
+- **Auto-Labeling**: Automatic label resolution via ARB resources or humanized field names
 
 ## Quick Start
 
@@ -286,6 +288,86 @@ DynamicFormWidget(
 )
 ```
 
+### Custom Default Widgets via DynamicFormTheme
+
+Replace default widgets for specific field types across your entire app:
+
+```dart
+import 'package:convention/dynamic_form/theme.dart';
+
+// Wrap your app with DynamicFormTheme
+DynamicFormTheme(
+  builders: {
+    FieldType.bool: ({required label, required value, required mode, required onChanged, ...}) {
+      // Custom bool widget with chip-style display
+      if (mode == AutoWidgetMode.view) {
+        return Chip(
+          label: Text(value == true ? 'Active' : 'Inactive'),
+          backgroundColor: value == true ? Colors.green.shade100 : Colors.grey.shade200,
+        );
+      }
+      return SwitchListTile(
+        value: value ?? false,
+        onChanged: onChanged,
+        title: Text(label),
+      );
+    },
+    FieldType.dateTime: ({required label, ...}) => MyCustomDatePicker(...),
+  },
+  child: MyApp(),
+)
+```
+
+**Widget Priority Order:**
+1. `FieldConfig.widget` (per-field custom widget) - HIGHEST
+2. `DynamicFormTheme.builders[type]` (custom default by type)
+3. Built-in default widget - LOWEST
+
+### Auto-Labeling
+
+Labels can be automatically resolved, eliminating the need to specify them manually:
+
+```dart
+// Labels are resolved in this order:
+// 1. FieldConfig.label (if set)
+// 2. widget.labelResolver (if set and returns non-null)
+// 3. DynamicFormTheme.labelResolver (if set and returns non-null)
+// 4. Humanized field name: "firstName" -> "First Name"
+
+// Minimal config - labels auto-generated
+DynamicFormWidget(
+  value: {'firstName': 'John', 'lastName': 'Doe'},
+  fieldConfigs: {
+    'firstName': FieldConfig(),  // Auto-label: "First Name"
+    'lastName': FieldConfig(),   // Auto-label: "Last Name"
+  },
+)
+
+// With ARB resources
+DynamicFormWidget(
+  value: {'firstName': 'John'},
+  fieldConfigs: {'firstName': FieldConfig()},
+  labelResolver: (fieldNameSnakeCase) {
+    // fieldNameSnakeCase is 'first_name'
+    final key = 'form_$fieldNameSnakeCase';
+    return AppLocalizations.of(context)?.translate(key);
+  },
+)
+
+// Project-wide via DynamicFormTheme
+DynamicFormTheme(
+  labelResolver: (fieldNameSnakeCase) {
+    return myArbLookup('form_$fieldNameSnakeCase');
+  },
+  child: MyApp(),
+)
+```
+
+**Field Name Conversion:**
+- camelCase is converted to snake_case: `firstName` → `first_name`
+- Dot notation uses the last segment: `user.address.streetName` → `street_name`
+- Humanization: `first_name` → `First Name`
+
 ## Validation
 
 DynamicFormWidget provides automatic validation:
@@ -332,6 +414,7 @@ DynamicFormWidget({
   AutoWidgetMode mode = view,                     // view or edit mode
   Function(Map<String, dynamic>)? onChanged,      // Called when value changes
   Widget Function(...)? layoutBuilder,            // Custom layout
+  LabelResolver? labelResolver,                   // Auto-labeling (NEW)
 })
 ```
 
@@ -349,7 +432,7 @@ class DynamicFormWidgetState {
 
 ```dart
 class FieldConfig {
-  final String label;                    // Display label
+  final String? label;                   // Display label (null = auto-resolve)
   final FieldType? type;                 // Field type (null = infer from value)
   final bool required;                   // Whether field is required
   final String? hint;                    // Hint text for edit mode
@@ -358,6 +441,43 @@ class FieldConfig {
   final Map<String, FieldConfig>? nestedFields;  // For nested objects
   final Widget Function(...)? widget;    // Custom widget builder
 }
+```
+
+### DynamicFormTheme
+
+```dart
+class DynamicFormTheme extends InheritedWidget {
+  final Map<FieldType, DynamicFormFieldBuilder>? builders;  // Custom default widgets
+  final LabelResolver? labelResolver;                       // Project-wide label resolver
+
+  static DynamicFormTheme? of(BuildContext context);
+  DynamicFormFieldBuilder? builderFor(FieldType type);
+}
+```
+
+### LabelResolver
+
+```dart
+/// Resolves a label for the given field name (in snake_case).
+/// Return null to fall back to humanized field name.
+typedef LabelResolver = String? Function(String fieldNameSnakeCase);
+```
+
+### DynamicFormFieldBuilder
+
+```dart
+typedef DynamicFormFieldBuilder = Widget Function({
+  required String label,
+  required dynamic value,
+  required AutoWidgetMode mode,
+  required ValueChanged<dynamic> onChanged,
+  bool required,
+  String? hint,
+  String? validationError,
+  List<dynamic>? enumValues,
+  dynamic nestedFields,
+  GlobalKey<FormFieldState>? fieldKey,
+});
 ```
 
 ### FieldType Enum
@@ -373,6 +493,16 @@ enum FieldType {
   list,
   nested,
 }
+```
+
+### Helper Functions
+
+```dart
+/// Converts camelCase to snake_case. For dot notation, uses last segment.
+String toSnakeCase(String input);  // "firstName" -> "first_name"
+
+/// Humanizes snake_case to title case with spaces.
+String humanizeFieldName(String snakeCase);  // "first_name" -> "First Name"
 ```
 
 ## Examples
@@ -454,6 +584,14 @@ Benefits:
 - Easier to debug
 
 ## Version History
+
+### v2.1.0 (2025-12-04)
+- Added `DynamicFormTheme` InheritedWidget for project-wide customization
+- Added custom default widget builders per `FieldType`
+- Added auto-labeling with `LabelResolver`
+- Made `FieldConfig.label` optional (nullable)
+- Added `toSnakeCase()` and `humanizeFieldName()` helper functions
+- Added `labelResolver` parameter to `DynamicFormWidget`
 
 ### v2.0.0 (2025-01-25)
 - **BREAKING**: Complete refactor from code generation to Map-based approach
