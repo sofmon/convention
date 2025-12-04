@@ -574,4 +574,4 @@ Returns an `_StateSyncInherited<T>` object with:
 
 ## License
 
-Part of the Ingreed project by Sofmon.
+Part of the convention project.

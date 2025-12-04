@@ -609,4 +609,4 @@ Benefits:
 
 ## License
 
-Part of the ingreed project.
+Part of the convention project.
