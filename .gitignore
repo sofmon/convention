@@ -3,6 +3,9 @@
 **/.secret
 **/.claude
 
+# Artifacts in Convention package are used for internal testing
+/art
+
 ### Flutter ###
 
 # Miscellaneous

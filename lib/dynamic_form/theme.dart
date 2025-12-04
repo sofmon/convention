@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'field_widget.dart';
 import 'schema.dart';
 
-/// InheritedWidget that provides custom default field widget builders and label resolution.
+/// InheritedWidget that provides custom default field widget builders, label resolution,
+/// and default field configuration.
 ///
 /// Wrap your widget tree with DynamicFormTheme to customize how fields
 /// are rendered by type without specifying widget builders for each field.
@@ -19,6 +20,7 @@ import 'schema.dart';
 ///     final key = 'form_$fieldName';
 ///     return AppLocalizations.of(context)?.translate(key);
 ///   },
+///   fieldConfig: FieldConfig(required: false),  // All fields optional by default
 ///   child: DynamicFormWidget(...),
 /// )
 /// ```
@@ -32,10 +34,15 @@ class DynamicFormTheme extends InheritedWidget {
   /// Called with the snake_case field name. Return null to fall back to humanized name.
   final LabelResolver? labelResolver;
 
+  /// Default field configuration for all fields.
+  /// Used when a field doesn't have an explicit FieldConfig in fieldConfigs.
+  final FieldConfig? fieldConfig;
+
   const DynamicFormTheme({
     Key? key,
     this.builders,
     this.labelResolver,
+    this.fieldConfig,
     required Widget child,
   }) : super(key: key, child: child);
 
@@ -50,6 +57,7 @@ class DynamicFormTheme extends InheritedWidget {
   @override
   bool updateShouldNotify(DynamicFormTheme oldWidget) {
     return builders != oldWidget.builders ||
-        labelResolver != oldWidget.labelResolver;
+        labelResolver != oldWidget.labelResolver ||
+        fieldConfig != oldWidget.fieldConfig;
   }
 }

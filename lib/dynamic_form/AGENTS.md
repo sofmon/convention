@@ -2,9 +2,9 @@
 
 ## Current Implementation Status
 
-**Status**: ✅ IMPLEMENTED (v2.1.0 - 2025-12-04)
+**Status**: ✅ IMPLEMENTED (v2.2.0 - 2025-12-04)
 **Architecture**: Map-based runtime system (no code generation)
-**Latest Features**: Custom default widgets, auto-labeling
+**Latest Features**: Auto-discovery, optional fieldConfigs, custom default widgets, auto-labeling
 
 ---
 
@@ -14,6 +14,7 @@ DynamicFormWidget is a Flutter widget that generates view and edit UIs from `Map
 
 **Key Innovations**:
 - No code generation, no reflection, no tree-shaking issues
+- Auto-discovery of fields from value map (no fieldConfigs required)
 - Custom default widgets per FieldType via `DynamicFormTheme`
 - Auto-labeling via `LabelResolver` with ARB resource support
 
@@ -28,7 +29,12 @@ DynamicFormWidget is a Flutter widget that generates view and edit UIs from `Map
 - Suffered from tree-shaking issues on web
 - Complex setup and maintenance
 
-### v2.1.0 (Current)
+### v2.2.0 (Current)
+- Auto-discovery of fields from `value` map
+- Optional `fieldConfigs` - only provides overrides
+- `fieldConfig` in `DynamicFormTheme` for project-wide defaults
+
+### v2.1.0
 - Custom default widgets via `DynamicFormTheme`
 - Auto-labeling via `LabelResolver`
 - Optional `FieldConfig.label` (auto-resolved if null)
@@ -125,10 +131,27 @@ static FieldType? inferType(dynamic value) {
 ```dart
 class DynamicFormWidget extends StatefulWidget {
   final Map<String, dynamic> value;
-  final Map<String, FieldConfig> fieldConfigs;
+  final Map<String, FieldConfig>? fieldConfigs;  // Optional overrides
   final AutoWidgetMode mode;  // view or edit
   final void Function(Map<String, dynamic>)? onChanged;
   final Widget Function(...)? layoutBuilder;
+  final LabelResolver? labelResolver;
+}
+```
+
+**Field Discovery** (NEW in v2.2.0):
+```dart
+// All fields auto-discovered from value.keys
+Iterable<String> _getFieldKeys() => widget.value.keys;
+
+// Config priority: fieldConfigs[key] > theme.fieldConfig > FieldConfig()
+FieldConfig _getFieldConfig(String fieldKey) {
+  if (widget.fieldConfigs?.containsKey(fieldKey) ?? false) {
+    return widget.fieldConfigs![fieldKey]!;
+  }
+  final theme = DynamicFormTheme.of(context);
+  if (theme?.fieldConfig != null) return theme!.fieldConfig!;
+  return const FieldConfig();
 }
 ```
 
@@ -302,7 +325,7 @@ lib/dynamic_form/
 
 ## Usage Patterns
 
-### Pattern 1: Simple Form with Type Inference
+### Pattern 1: Zero Config (Auto-Discovery) - NEW in v2.2.0
 
 ```dart
 final data = {
@@ -311,20 +334,48 @@ final data = {
   'active': true,
 };
 
-final configs = {
-  'name': const FieldConfig(label: 'Name'),       // inferred: string
-  'age': const FieldConfig(label: 'Age'),         // inferred: int
-  'active': const FieldConfig(label: 'Active'),   // inferred: bool
-};
-
+// No fieldConfigs needed! All fields auto-discovered
 DynamicFormWidget(
   value: data,
-  fieldConfigs: configs,
   mode: AutoWidgetMode.edit,
 )
 ```
 
-### Pattern 2: Enum Fields (Explicit Type)
+### Pattern 2: Selective Overrides - NEW in v2.2.0
+
+```dart
+final data = {
+  'name': 'John',
+  'age': 30,
+  'active': true,
+};
+
+// Only override specific fields
+final configs = {
+  'age': const FieldConfig(type: FieldType.int, hint: 'Enter age'),
+};
+
+DynamicFormWidget(
+  value: data,
+  fieldConfigs: configs,  // Only overrides 'age', others use defaults
+  mode: AutoWidgetMode.edit,
+)
+```
+
+### Pattern 3: Theme-Wide Defaults - NEW in v2.2.0
+
+```dart
+// All fields optional by default
+DynamicFormTheme(
+  fieldConfig: const FieldConfig(required: false),
+  child: DynamicFormWidget(
+    value: {'name': 'John', 'email': 'john@example.com'},
+    mode: AutoWidgetMode.edit,
+  ),
+)
+```
+
+### Pattern 4: Enum Fields (Explicit Type Required)
 
 ```dart
 enum Status { active, inactive, pending }
@@ -333,14 +384,19 @@ final data = {'status': Status.active};
 
 final configs = {
   'status': FieldConfig(
-    label: 'Status',
     type: FieldType.enumType,           // explicit
-    enumValues: Status.values,          // required
+    enumValues: Status.values,          // required for enums
   ),
 };
+
+DynamicFormWidget(
+  value: data,
+  fieldConfigs: configs,  // Must provide config for enums
+  mode: AutoWidgetMode.edit,
+)
 ```
 
-### Pattern 3: Nested Fields with Dot Notation
+### Pattern 5: Nested Fields with Dot Notation
 
 ```dart
 final data = {
@@ -358,12 +414,11 @@ final configs = {
 };
 ```
 
-### Pattern 4: Custom Widget Builder
+### Pattern 6: Custom Widget Builder
 
 ```dart
 final configs = {
   'rating': FieldConfig(
-    label: 'Rating',
     widget: (context, value, onChanged, mode) {
       if (mode == AutoWidgetMode.view) {
         return Row(
@@ -385,7 +440,7 @@ final configs = {
 };
 ```
 
-### Pattern 5: Save and Validation
+### Pattern 7: Save and Validation
 
 ```dart
 final _formKey = GlobalKey<DynamicFormWidgetState>();
@@ -915,6 +970,20 @@ None (no code generation in v2.0.0)
 ---
 
 ## Version History
+
+### v2.2.0 (2025-12-04) - Auto-Discovery & Optional FieldConfigs
+**BREAKING CHANGES**:
+- `fieldConfigs` is now optional - fields are auto-discovered from `value` map
+- `fieldConfigs` now only provides overrides, not the list of fields to show
+
+**Features**:
+- Auto-discovery of all fields from `value.keys`
+- Added `fieldConfig` parameter to `DynamicFormTheme` for project-wide defaults
+- Config priority: `widget.fieldConfigs[key]` > `theme.fieldConfig` > `FieldConfig()`
+
+**API Changes**:
+- `DynamicFormWidget.fieldConfigs` is now optional (nullable)
+- `DynamicFormTheme` has new `fieldConfig` parameter
 
 ### v2.1.0 (2025-12-04) - Custom Default Widgets & Auto-Labeling
 **Features**:

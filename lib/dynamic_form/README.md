@@ -5,6 +5,7 @@ DynamicFormWidget is a Flutter widget that automatically creates view and edit U
 ## Features
 
 - **Map-Based**: Works with `Map<String, dynamic>` - no code generation required
+- **Auto-Discovery**: Automatically discovers fields from value map - no fieldConfigs required
 - **Type Inference**: Automatically infers field types from values
 - **Type-Safe**: Explicit type specification available when needed
 - **Extensible**: Custom field widgets via widget builders
@@ -15,6 +16,7 @@ DynamicFormWidget is a Flutter widget that automatically creates view and edit U
 - **Nested Fields**: Support for dot notation paths (e.g., "user.address.street")
 - **Custom Default Widgets**: Replace default widgets per type via `DynamicFormTheme`
 - **Auto-Labeling**: Automatic label resolution via ARB resources or humanized field names
+- **Selective Overrides**: Override only specific fields while auto-discovering others
 
 ## Quick Start
 
@@ -41,32 +43,7 @@ final userProfile = {
 };
 ```
 
-### 3. Configure Fields
-
-```dart
-final fieldConfigs = {
-  'name': const FieldConfig(
-    label: 'Full Name',
-    hint: 'Enter your full name',
-    // Type inferred from value (String)
-  ),
-  'email': const FieldConfig(
-    label: 'Email Address',
-    hint: 'Enter your email',
-    // Type inferred from value (String)
-  ),
-  'age': const FieldConfig(
-    label: 'Age',
-    type: FieldType.int,  // Explicitly specified
-  ),
-  'isActive': const FieldConfig(
-    label: 'Active',
-    // Type inferred from value (bool)
-  ),
-};
-```
-
-### 4. Use DynamicFormWidget
+### 3. Use DynamicFormWidget (Zero Config)
 
 ```dart
 import 'package:flutter/material.dart';
@@ -87,13 +64,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     'email': 'john@example.com',
     'age': 30,
     'isActive': true,
-  };
-
-  final _fieldConfigs = {
-    'name': const FieldConfig(label: 'Name'),
-    'email': const FieldConfig(label: 'Email'),
-    'age': const FieldConfig(label: 'Age', type: FieldType.int),
-    'isActive': const FieldConfig(label: 'Active'),
   };
 
   @override
@@ -119,7 +89,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: DynamicFormWidget(
           key: _formKey,
           value: _profile,
-          fieldConfigs: _fieldConfigs,
+          // No fieldConfigs needed! All fields auto-discovered
           mode: _mode,
         ),
       ),
@@ -140,6 +110,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 }
+```
+
+### 4. Override Specific Fields (Optional)
+
+```dart
+// Only override fields that need custom configuration
+final _fieldConfigs = {
+  'age': const FieldConfig(type: FieldType.int),  // Explicit type
+  'email': const FieldConfig(hint: 'Enter your email'),  // Add hint
+};
+
+DynamicFormWidget(
+  key: _formKey,
+  value: _profile,
+  fieldConfigs: _fieldConfigs,  // Only overrides 'age' and 'email'
+  mode: _mode,
+)
+// 'name' and 'isActive' are auto-discovered with defaults
 ```
 
 ## Supported Field Types
@@ -410,13 +398,15 @@ try {
 DynamicFormWidget({
   Key? key,
   required Map<String, dynamic> value,           // The data to display/edit
-  required Map<String, FieldConfig> fieldConfigs, // Field configurations
+  Map<String, FieldConfig>? fieldConfigs,        // Optional field overrides
   AutoWidgetMode mode = view,                     // view or edit mode
   Function(Map<String, dynamic>)? onChanged,      // Called when value changes
   Widget Function(...)? layoutBuilder,            // Custom layout
-  LabelResolver? labelResolver,                   // Auto-labeling (NEW)
+  LabelResolver? labelResolver,                   // Auto-labeling
 })
 ```
+
+**Field Discovery**: All fields are auto-discovered from `value.keys`. The `fieldConfigs` parameter only provides overrides for specific fields.
 
 ### DynamicFormWidgetState
 
@@ -449,11 +439,14 @@ class FieldConfig {
 class DynamicFormTheme extends InheritedWidget {
   final Map<FieldType, DynamicFormFieldBuilder>? builders;  // Custom default widgets
   final LabelResolver? labelResolver;                       // Project-wide label resolver
+  final FieldConfig? fieldConfig;                           // Default config for all fields
 
   static DynamicFormTheme? of(BuildContext context);
   DynamicFormFieldBuilder? builderFor(FieldType type);
 }
 ```
+
+**Config Priority**: `widget.fieldConfigs[key]` > `theme.fieldConfig` > `FieldConfig()`
 
 ### LabelResolver
 
@@ -584,6 +577,12 @@ Benefits:
 - Easier to debug
 
 ## Version History
+
+### v2.2.0 (2025-12-04)
+- **BREAKING**: `fieldConfigs` is now optional - fields are auto-discovered from `value` map
+- **BREAKING**: `fieldConfigs` now only provides overrides, not the list of fields to show
+- Added `fieldConfig` parameter to `DynamicFormTheme` for project-wide defaults
+- All fields from `value.keys` are now shown by default
 
 ### v2.1.0 (2025-12-04)
 - Added `DynamicFormTheme` InheritedWidget for project-wide customization

@@ -7,10 +7,14 @@ import 'field_widgets/default_field_widgets.dart';
 
 /// A widget that generates dynamic view and edit UIs from Map data.
 ///
-/// Given a [Map<String, dynamic>] and a [Map<String, FieldConfig>], DynamicFormWidget can:
-/// 1. Display the data in view mode
-/// 2. Provide editable form fields in edit mode
+/// Given a [Map<String, dynamic>], DynamicFormWidget automatically discovers fields
+/// and renders them. Optionally provide [fieldConfigs] to override specific field configurations.
+///
+/// Features:
+/// 1. Auto-discovers fields from value map keys
+/// 2. Display data in view mode or edit mode
 /// 3. Collect edited values and produce an updated Map on save
+/// 4. Override specific fields with custom FieldConfig
 ///
 /// Supports nested fields using dot notation, e.g., "user.address.street"
 ///
@@ -18,12 +22,19 @@ import 'field_widgets/default_field_widgets.dart';
 /// ```dart
 /// final key = GlobalKey<DynamicFormWidgetState>();
 ///
+/// // Minimal usage - auto-discovers all fields
+/// DynamicFormWidget(
+///   key: key,
+///   value: {'name': 'John', 'age': 30},
+///   mode: AutoWidgetMode.edit,
+/// );
+///
+/// // With overrides for specific fields
 /// DynamicFormWidget(
 ///   key: key,
 ///   value: {'name': 'John', 'age': 30},
 ///   fieldConfigs: {
-///     'name': FieldConfig(label: 'Name'),
-///     'age': FieldConfig(label: 'Age', type: FieldType.int),
+///     'age': FieldConfig(type: FieldType.int),  // Override age config
 ///   },
 ///   mode: AutoWidgetMode.edit,
 /// );
@@ -35,9 +46,11 @@ class DynamicFormWidget extends StatefulWidget {
   /// The current data to display/edit
   final Map<String, dynamic> value;
 
-  /// Configuration for each field
-  /// Keys can use dot notation for nested fields (e.g., "user.address.street")
-  final Map<String, FieldConfig> fieldConfigs;
+  /// Optional configuration overrides for specific fields.
+  /// Keys can use dot notation for nested fields (e.g., "user.address.street").
+  /// Fields not in this map will use defaults from DynamicFormTheme.fieldConfig
+  /// or the default FieldConfig().
+  final Map<String, FieldConfig>? fieldConfigs;
 
   /// The mode (view or edit)
   final AutoWidgetMode mode;
@@ -56,7 +69,7 @@ class DynamicFormWidget extends StatefulWidget {
   const DynamicFormWidget({
     Key? key,
     required this.value,
-    required this.fieldConfigs,
+    this.fieldConfigs,
     this.mode = AutoWidgetMode.view,
     this.onChanged,
     this.layoutBuilder,
@@ -140,6 +153,30 @@ class DynamicFormWidgetState extends State<DynamicFormWidget> {
     }
   }
 
+  /// Gets ALL field keys from value map (always auto-discover)
+  Iterable<String> _getFieldKeys() {
+    return widget.value.keys;
+  }
+
+  /// Gets the effective config for a specific field.
+  /// Priority: fieldConfigs[key] > theme.fieldConfig > default FieldConfig()
+  FieldConfig _getFieldConfig(String fieldKey) {
+    // Priority 1: Explicit fieldConfig for this field
+    if (widget.fieldConfigs != null &&
+        widget.fieldConfigs!.containsKey(fieldKey)) {
+      return widget.fieldConfigs![fieldKey]!;
+    }
+
+    // Priority 2: Theme's default fieldConfig
+    final theme = DynamicFormTheme.of(context);
+    if (theme?.fieldConfig != null) {
+      return theme!.fieldConfig!;
+    }
+
+    // Priority 3: Default FieldConfig
+    return const FieldConfig();
+  }
+
   /// Resolves the label for a field using the priority chain:
   /// 1. FieldConfig.label (explicit)
   /// 2. widget.labelResolver (per-widget)
@@ -179,9 +216,8 @@ class DynamicFormWidgetState extends State<DynamicFormWidget> {
   ValidationResult validate() {
     final errors = <String, String>{};
 
-    for (final entry in widget.fieldConfigs.entries) {
-      final fieldPath = entry.key;
-      final config = entry.value;
+    for (final fieldPath in _getFieldKeys()) {
+      final config = _getFieldConfig(fieldPath);
       final value = _getValueByPath(fieldPath);
       final label = _resolveLabel(fieldPath, config);
 
@@ -246,10 +282,9 @@ class DynamicFormWidgetState extends State<DynamicFormWidget> {
   Widget build(BuildContext context) {
     final fieldWidgets = <Widget>[];
 
-    // Build widgets in the order they appear in fieldConfigs
-    for (final entry in widget.fieldConfigs.entries) {
-      final fieldPath = entry.key;
-      final config = entry.value;
+    // Build widgets for all fields in value map (auto-discovery)
+    for (final fieldPath in _getFieldKeys()) {
+      final config = _getFieldConfig(fieldPath);
       final fieldWidget = _buildFieldWidget(fieldPath, config);
       fieldWidgets.add(fieldWidget);
     }

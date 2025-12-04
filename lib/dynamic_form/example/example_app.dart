@@ -15,6 +15,8 @@ import 'models.dart';
 /// 5. Use type inference and custom field configurations
 /// 6. Use DynamicFormTheme for custom default widgets
 /// 7. Use auto-labeling with labelResolver
+/// 8. Auto-discovery of fields (no fieldConfigs required)
+/// 9. Override specific fields while auto-discovering others
 ///
 /// Run this with: flutter run lib/util/builder/example/example_app.dart
 void main() {
@@ -134,38 +136,27 @@ class _ExampleHomePageState extends State<ExampleHomePage> {
     'accountType': AccountType.premium,
   };
 
-  // Field configurations - demonstrating auto-labeling
+  // Field configurations - only override specific fields (auto-discovery handles the rest)
+  // All fields from _userProfile will be shown; these configs override specific ones
   // Labels are resolved via: FieldConfig.label > widget.labelResolver > theme.labelResolver > humanize
   final Map<String, FieldConfig> _fieldConfigs = {
+    // Override 'id' to make it not required
     'id': const FieldConfig(
-      // No label - will use theme.labelResolver ('id' -> 'User ID')
       type: FieldType.string,
       required: false,
     ),
-    'name': const FieldConfig(
-      // No label - will use theme.labelResolver ('name' -> 'Full Name')
-      hint: 'Enter your full name',
-      // type is inferred from value (String)
-    ),
-    'email': const FieldConfig(
-      // No label - will use theme.labelResolver ('email' -> 'Email Address')
-      hint: 'Enter your email',
-      // type is inferred from value (String)
-    ),
+    // Override 'age' with explicit type and hint
     'age': const FieldConfig(
-      // No label - will use theme.labelResolver ('age' -> 'Age (years)')
       hint: 'Enter your age',
-      type: FieldType.int, // Explicitly specified
+      type: FieldType.int,
     ),
-    'isActive': const FieldConfig(
-      // No label - will use theme.labelResolver ('is_active' -> 'Active Status')
-      // Uses custom bool widget from DynamicFormTheme.builders
-    ),
+    // Override 'accountType' to specify enum values (required for enums)
     'accountType': FieldConfig(
-      // No label - will use theme.labelResolver ('account_type' -> 'Account Type')
       type: FieldType.enumType,
       enumValues: AccountType.values,
     ),
+    // Note: 'name', 'email', 'isActive' are NOT in fieldConfigs
+    // They will be auto-discovered and use defaults (or theme.fieldConfig)
   };
 
   // Controller for DynamicFormWidget
@@ -295,14 +286,16 @@ class _ExampleHomePageState extends State<ExampleHomePage> {
                       '3. Click Save to apply changes\n'
                       '4. Click Cancel to discard changes\n\n'
                       'Features:\n'
+                      '• Auto-discovery: all fields from value map shown\n'
                       '• Type inference (name, email, isActive)\n'
-                      '• Explicit types (age: int, accountType: enum)\n'
-                      '• Custom hints\n'
+                      '• Override specific fields (id, age, accountType)\n'
                       '• Map-based data (no code generation needed)\n\n'
-                      'New Features:\n'
+                      'v2.2.0 Features:\n'
+                      '• Optional fieldConfigs - auto-discovers all fields\n'
+                      '• fieldConfigs now only overrides specific fields\n'
+                      '• theme.fieldConfig for project-wide defaults\n'
                       '• Auto-labeling via labelResolver\n'
-                      '• Custom default widgets via DynamicFormTheme\n'
-                      '• isActive uses custom bool widget from theme',
+                      '• Custom default widgets via DynamicFormTheme',
                       style: TextStyle(fontSize: 12),
                     ),
                   ],
