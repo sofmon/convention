@@ -273,9 +273,9 @@ In `openapi.go`:
 
 | Package | Import Alias | Purpose |
 |---------|--------------|---------|
-| `ingreed/lib/util/ctx` | `convCtx` | Context with request, scope, claims |
-| `ingreed/lib/util/auth` | `convAuth` | Authentication policy and check |
-| `ingreed/lib/util/cfg` | `convCfg` | Configuration (TLS certificates) |
+| `github.com/sofmon/convention/lib/ctx` | `convCtx` | Context with request, scope, claims |
+| `github.com/sofmon/convention/lib/auth` | `convAuth` | Authentication policy and check |
+| `github.com/sofmon/convention/lib/cfg` | `convCfg` | Configuration (TLS certificates) |
 
 ## Testing
 

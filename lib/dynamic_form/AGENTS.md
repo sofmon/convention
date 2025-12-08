@@ -864,13 +864,7 @@ DynamicFormWidget(
 ),
 ```
 
-### 2. Nested Object Editing
-**Current**: Dot notation for flat access
-**Limitation**: No recursive DynamicFormWidget rendering yet
-
-**Workaround**: Use dot notation or custom nested form widget
-
-### 3. Type Ambiguity
+### 2. Type Ambiguity
 **Current**: Cannot distinguish int from double without value
 **Limitation**: Empty fields default to inferred type
 
@@ -879,7 +873,7 @@ DynamicFormWidget(
 'price': FieldConfig(label: 'Price', type: FieldType.double),
 ```
 
-### 4. DateTime Context
+### 3. DateTime Context
 **Current**: Uses global ScaffoldMessengerKey
 **Limitation**: May not work in all widget tree configurations
 

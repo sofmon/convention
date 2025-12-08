@@ -227,7 +227,7 @@ func getHmacSecret() ([]byte, error)
 
 - Lazy loads from config on first use
 - Cached in package variable `hmacSecret`
-- Loaded via `ingreed/lib/util/cfg.Bytes("communication_secret")`
+- Loaded via `github.com/sofmon/convention/lib/cfg.Bytes("communication_secret")`
 - Not thread-safe (assumes single-threaded initialization)
 
 ## Testing Strategy

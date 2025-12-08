@@ -437,14 +437,84 @@ class DefaultFieldWidgets {
     required ValueChanged<Map<String, dynamic>?> onChanged,
     Map<String, FieldConfig>? nestedFields,
   }) {
-    // For nested objects, display as a card
+    // Use value keys for auto-discovery (consistent with v2.2.0 pattern)
+    final fieldsToRender = value?.keys ?? <String>[];
+
+    if (fieldsToRender.isEmpty) {
+      return _buildFieldRow(
+        label: label,
+        child: const Card(
+          child: Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Text('Empty object'),
+          ),
+        ),
+      );
+    }
+
     return _buildFieldRow(
       label: label,
       child: Card(
         child: Padding(
           padding: const EdgeInsets.all(8.0),
-          child: Text('Nested object: ${nestedFields?.keys.join(", ") ?? "no fields"}'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final key in fieldsToRender)
+                _buildNestedField(
+                  key: key,
+                  value: value![key],
+                  config: nestedFields?[key],
+                  mode: mode,
+                  onChanged: (newValue) {
+                    final updated = Map<String, dynamic>.from(value);
+                    updated[key] = newValue;
+                    onChanged(updated);
+                  },
+                ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  /// Builds a single field within a nested object.
+  /// Uses type inference and optional config overrides.
+  static Widget _buildNestedField({
+    required String key,
+    required dynamic value,
+    FieldConfig? config,
+    required AutoWidgetMode mode,
+    required ValueChanged<dynamic> onChanged,
+  }) {
+    // Infer type from value, with optional config override
+    final effectiveType = config?.getEffectiveType(value) ?? FieldConfig.inferType(value);
+    final label = config?.label ?? humanizeFieldName(toSnakeCase(key));
+
+    if (effectiveType == null) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8.0),
+        child: Text(
+          'Unknown type for "$key"',
+          style: const TextStyle(color: Colors.red),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: buildWidgetByType(
+        type: effectiveType,
+        label: label,
+        value: value,
+        mode: mode,
+        onChanged: onChanged,
+        required: config?.required ?? true,
+        hint: config?.hint,
+        validationError: config?.validationError,
+        enumValues: config?.enumValues,
+        nestedFields: config?.nestedFields,
       ),
     );
   }

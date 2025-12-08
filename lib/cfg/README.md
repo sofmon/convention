@@ -15,7 +15,7 @@ By default, configuration files are read from `/etc/agent/`.
 ### Basic String Configuration
 
 ```go
-import "github.com/sofmon/ingreed/lib/util/cfg"
+import "github.com/sofmon/convention/lib/cfg"
 
 // Define a config key
 const APIEndpoint cfg.ConfigKey = "api_endpoint.txt"

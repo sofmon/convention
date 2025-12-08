@@ -148,7 +148,7 @@ Actions support dynamic path matching with the following templates:
 
 ## Configuration
 
-The package requires the `communication_secret` configuration value for JWT signing. This should be set using the `ingreed/lib/util/cfg` package:
+The package requires the `communication_secret` configuration value for JWT signing. This should be set using the `github.com/sofmon/convention/lib/cfg` package:
 
 ```bash
 # .secret file or environment

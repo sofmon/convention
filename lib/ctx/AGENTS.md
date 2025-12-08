@@ -141,8 +141,8 @@ When adding a new context value:
 
 ## Dependencies
 
-- `ingreed/lib/util/auth` - Claims, User, Action types
-- `ingreed/lib/util/cfg` - Configuration for environment
+- `github.com/sofmon/convention/lib/auth` - Claims, User, Action types
+- `github.com/sofmon/convention/lib/cfg` - Configuration for environment
 - `github.com/google/uuid` - Workflow ID generation
 - `log/slog` - Structured logging
 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../main.dart';
+import '../dynamic_form.dart';
 import '../field_widget.dart';
 import '../schema.dart';
 import '../theme.dart';
