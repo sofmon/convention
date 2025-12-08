@@ -850,9 +850,9 @@ DynamicFormWidget(
 
 ## Known Limitations
 
-### 1. List Editing
-**Current**: Basic add/remove of string items
-**Limitation**: No reordering, complex list elements need custom widgets
+### 1. List Reordering
+**Current**: Lists support add/remove and complex objects, but no drag-to-reorder
+**Limitation**: No built-in reordering UI
 
 **Workaround**:
 ```dart

@@ -38,13 +38,8 @@ class DynamicFormTheme extends InheritedWidget {
   /// Used when a field doesn't have an explicit FieldConfig in fieldConfigs.
   final FieldConfig? fieldConfig;
 
-  const DynamicFormTheme({
-    Key? key,
-    this.builders,
-    this.labelResolver,
-    this.fieldConfig,
-    required Widget child,
-  }) : super(key: key, child: child);
+  const DynamicFormTheme({Key? key, this.builders, this.labelResolver, this.fieldConfig, required Widget child})
+    : super(key: key, child: child);
 
   /// Gets the custom builder for a field type, or null if none registered.
   DynamicFormFieldBuilder? builderFor(FieldType type) => builders?[type];
@@ -56,8 +51,6 @@ class DynamicFormTheme extends InheritedWidget {
 
   @override
   bool updateShouldNotify(DynamicFormTheme oldWidget) {
-    return builders != oldWidget.builders ||
-        labelResolver != oldWidget.labelResolver ||
-        fieldConfig != oldWidget.fieldConfig;
+    return builders != oldWidget.builders || labelResolver != oldWidget.labelResolver || fieldConfig != oldWidget.fieldConfig;
   }
 }

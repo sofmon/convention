@@ -65,16 +65,11 @@ class DefaultFieldWidgets {
           fieldKey: fieldKey,
         );
       case FieldType.bool:
-        return _buildBoolFieldSimple(
-          label: label,
-          value: value as bool?,
-          mode: mode,
-          onChanged: onChanged,
-        );
+        return _buildBoolFieldSimple(label: label, value: value as bool?, mode: mode, onChanged: onChanged);
       case FieldType.dateTime:
         return _buildDateTimeFieldSimple(
           label: label,
-          value: value as DateTime?,
+          value: DateTime.tryParse(value),
           mode: mode,
           onChanged: onChanged,
           hint: hint,
@@ -111,20 +106,11 @@ class DefaultFieldWidgets {
   }
 
   // Helper: builds a labeled field row
-  static Widget _buildFieldRow({
-    required String label,
-    required Widget child,
-  }) {
+  static Widget _buildFieldRow({required String label, required Widget child}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
-        ),
+        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         const SizedBox(height: 4),
         child,
       ],
@@ -259,10 +245,7 @@ class DefaultFieldWidgets {
     if (mode == AutoWidgetMode.view) {
       return _buildFieldRow(
         label: label,
-        child: Icon(
-          value == true ? Icons.check_circle : Icons.cancel,
-          color: value == true ? Colors.green : Colors.grey,
-        ),
+        child: Icon(value == true ? Icons.check_circle : Icons.cancel, color: value == true ? Colors.green : Colors.grey),
       );
     }
 
@@ -283,10 +266,7 @@ class DefaultFieldWidgets {
     final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
 
     if (mode == AutoWidgetMode.view) {
-      return _buildFieldRow(
-        label: label,
-        child: Text(value != null ? dateFormat.format(value) : '—'),
-      );
+      return _buildFieldRow(label: label, child: Text(value != null ? dateFormat.format(value) : '—'));
     }
 
     return _buildFieldRow(
@@ -304,10 +284,7 @@ class DefaultFieldWidgets {
           );
 
           if (date != null) {
-            final time = await showTimePicker(
-              context: context,
-              initialTime: TimeOfDay.fromDateTime(value ?? DateTime.now()),
-            );
+            final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(value ?? DateTime.now()));
 
             if (time != null) {
               onChanged(DateTime(date.year, date.month, date.day, time.hour, time.minute));
@@ -322,10 +299,7 @@ class DefaultFieldWidgets {
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(value != null ? dateFormat.format(value) : hint ?? 'Select date'),
-              const Icon(Icons.calendar_today),
-            ],
+            children: [Text(value != null ? dateFormat.format(value) : hint ?? 'Select date'), const Icon(Icons.calendar_today)],
           ),
         ),
       ),
@@ -343,10 +317,7 @@ class DefaultFieldWidgets {
     GlobalKey<FormFieldState>? fieldKey,
   }) {
     if (mode == AutoWidgetMode.view) {
-      return _buildFieldRow(
-        label: label,
-        child: Text(value?.toString().split('.').last ?? '—'),
-      );
+      return _buildFieldRow(label: label, child: Text(value?.toString().split('.').last ?? '—'));
     }
 
     return _buildFieldRow(
@@ -359,10 +330,7 @@ class DefaultFieldWidgets {
           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         ),
         items: enumValues?.map((ev) {
-          return DropdownMenuItem<dynamic>(
-            value: ev,
-            child: Text(ev.toString().split('.').last),
-          );
+          return DropdownMenuItem<dynamic>(value: ev, child: Text(ev.toString().split('.').last));
         }).toList(),
         onChanged: onChanged,
         validator: (v) {
@@ -384,13 +352,15 @@ class DefaultFieldWidgets {
   }) {
     final items = value ?? [];
 
-    if (mode == AutoWidgetMode.view) {
+    if (items.isEmpty) {
       return _buildFieldRow(
         label: label,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (items.isEmpty) const Text('—') else ...items.map((item) => Text('• ${item.toString()}')),
+            const Text('—'),
+            if (mode == AutoWidgetMode.edit)
+              TextButton.icon(icon: const Icon(Icons.add), label: const Text('Add item'), onPressed: () => onChanged(['New item'])),
           ],
         ),
       );
@@ -402,32 +372,154 @@ class DefaultFieldWidgets {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ...List.generate(items.length, (index) {
-            return Row(
-              children: [
-                Expanded(child: Text('• ${items[index].toString()}')),
-                IconButton(
-                  icon: const Icon(Icons.remove_circle),
-                  onPressed: () {
-                    final newList = List.from(items)..removeAt(index);
-                    onChanged(newList);
-                  },
-                ),
-              ],
+            return _buildListItem(
+              index: index,
+              item: items[index],
+              mode: mode,
+              onChanged: (newValue) {
+                final newList = List.from(items);
+                newList[index] = newValue;
+                onChanged(newList);
+              },
+              onRemove: mode == AutoWidgetMode.edit
+                  ? () {
+                      final newList = List.from(items)..removeAt(index);
+                      onChanged(newList);
+                    }
+                  : null,
             );
           }),
-          TextButton.icon(
-            icon: const Icon(Icons.add),
-            label: const Text('Add item'),
-            onPressed: () {
-              final newList = List.from(items)..add('New item');
-              onChanged(newList);
-            },
-          ),
-          if (validationError != null)
-            Text(validationError, style: const TextStyle(color: Colors.red, fontSize: 12)),
+          if (mode == AutoWidgetMode.edit)
+            TextButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('Add item'),
+              onPressed: () {
+                // Use first item as template for complex objects
+                final template = items.isNotEmpty && items.first is Map
+                    ? Map<String, dynamic>.from((items.first as Map).map((k, v) => MapEntry(k, _defaultValueForType(v))))
+                    : 'New item';
+                onChanged(List.from(items)..add(template));
+              },
+            ),
+          if (validationError != null) Text(validationError, style: const TextStyle(color: Colors.red, fontSize: 12)),
         ],
       ),
     );
+  }
+
+  /// Builds a single list item based on its type.
+  static Widget _buildListItem({
+    required int index,
+    required dynamic item,
+    required AutoWidgetMode mode,
+    required ValueChanged<dynamic> onChanged,
+    VoidCallback? onRemove,
+  }) {
+    final itemType = FieldConfig.inferType(item);
+
+    // Complex object (Map) - render as expandable card
+    if (itemType == FieldType.nested && item is Map<String, dynamic>) {
+      return Card(
+        margin: const EdgeInsets.only(bottom: 8.0),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text('[$index]', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  if (onRemove != null)
+                    IconButton(
+                      icon: const Icon(Icons.remove_circle, size: 20),
+                      onPressed: onRemove,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ...item.keys.map((key) {
+                return _buildNestedField(
+                  key: key,
+                  value: item[key],
+                  config: null,
+                  mode: mode,
+                  onChanged: (newValue) {
+                    final updated = Map<String, dynamic>.from(item);
+                    updated[key] = newValue;
+                    onChanged(updated);
+                  },
+                );
+              }),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Nested list - recursive rendering
+    if (itemType == FieldType.list && item is List) {
+      return Card(
+        margin: const EdgeInsets.only(bottom: 8.0),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text('[$index]', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  if (onRemove != null) IconButton(icon: const Icon(Icons.remove_circle, size: 20), onPressed: onRemove),
+                ],
+              ),
+              _buildListFieldSimple(label: '', value: item, mode: mode, onChanged: onChanged),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Simple types - bullet point display
+    if (mode == AutoWidgetMode.view) {
+      return Padding(padding: const EdgeInsets.only(bottom: 4.0), child: Text('• ${item.toString()}'));
+    }
+
+    // Edit mode for simple types
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextFormField(
+              initialValue: item?.toString() ?? '',
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                isDense: true,
+              ),
+              onChanged: (text) => onChanged(text),
+            ),
+          ),
+          if (onRemove != null) IconButton(icon: const Icon(Icons.remove_circle), onPressed: onRemove),
+        ],
+      ),
+    );
+  }
+
+  /// Returns a default value for a given type (for creating new list items).
+  static dynamic _defaultValueForType(dynamic existingValue) {
+    if (existingValue is String) return '';
+    if (existingValue is int) return 0;
+    if (existingValue is double) return 0.0;
+    if (existingValue is bool) return false;
+    if (existingValue is List) return <dynamic>[];
+    if (existingValue is Map) {
+      return Map<String, dynamic>.from(existingValue.map((k, v) => MapEntry(k, _defaultValueForType(v))));
+    }
+    return null;
   }
 
   static Widget _buildNestedFieldSimple({
@@ -444,10 +536,7 @@ class DefaultFieldWidgets {
       return _buildFieldRow(
         label: label,
         child: const Card(
-          child: Padding(
-            padding: EdgeInsets.all(8.0),
-            child: Text('Empty object'),
-          ),
+          child: Padding(padding: EdgeInsets.all(8.0), child: Text('Empty object')),
         ),
       );
     }
@@ -495,10 +584,7 @@ class DefaultFieldWidgets {
     if (effectiveType == null) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 8.0),
-        child: Text(
-          'Unknown type for "$key"',
-          style: const TextStyle(color: Colors.red),
-        ),
+        child: Text('Unknown type for "$key"', style: const TextStyle(color: Colors.red)),
       );
     }
 
