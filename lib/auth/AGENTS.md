@@ -31,6 +31,7 @@ type User string
 type Users []User
 type Entity string
 type Entities []Entity
+type RolesPerEntity map[Entity]Roles  // Entity -> associated roles
 type Tenant string
 type Tenants []Tenant
 type Role string
@@ -58,10 +59,10 @@ type Config struct {
 ```go
 type Claims struct {
     User      User
-    Entities  Entities
+    Entities  RolesPerEntity    // map[Entity]Roles - entities with their roles
     Tenants   Tenants
-    Roles     Roles
-    Additions map[string]any  // Custom claims
+    Roles     Roles             // Base user roles
+    Additions map[string]any    // Custom claims
 }
 ```
 
@@ -69,21 +70,21 @@ JWT claim keys are defined as package constants to avoid typos.
 
 ## Authorization Flow
 
-### 1. Configuration Expansion (eval.go:23-55)
+### 1. Configuration Expansion (eval.go:29-64)
 
-`expandConfig()` transforms the declarative `Config` into optimized runtime structures:
+`expandConfig()` transforms the declarative `Policy` into optimized runtime structures:
 
 ```go
-func expandConfig(cfg Config) (allowed allowedRoles, publicActions allowedActions, err error)
+func expandConfig(policy Policy) (actions allowedActionSources, publicActions allowedActions, err error)
 ```
 
 **Process:**
 - Iterates through each role's permissions
 - Looks up each permission's actions
-- Converts each action string into `allowedAction` struct
-- Builds two indexes: `allowedRoles` (authenticated) and `publicActions` (unauthenticated)
+- Converts each action string into `actionSource` struct (containing action + role)
+- Builds two indexes: `allowedActionSources` (authenticated) and `publicActions` (unauthenticated)
 
-**Key transformation:** `Action` string → `allowedAction` struct via `generateAllowedAction()` (eval.go:101-135)
+**Key transformation:** `Action` string → `actionSource` struct via `generateAllowedAction()` (eval.go:120-154)
 
 ### 2. Action Parsing (eval.go:101-135)
 
@@ -104,16 +105,22 @@ func generateAllowedAction(a Action) (res allowedAction, err error)
    - `{entity}` → `allowedSegmentEntity{}`
    - Otherwise → `allowedSegmentFixed(segment)`
 
-### 3. Runtime Structures (eval.go:13-21, 177-235)
+### 3. Runtime Structures (eval.go:13-27)
 
 ```go
-type allowedRoles map[Role]allowedActions
 type allowedActions []allowedAction
 type allowedAction struct {
     method  string
     path    allowedPath
     openEnd bool  // true if path ends with {any...}
 }
+
+// actionSource tracks which role an action came from
+type actionSource struct {
+    action allowedAction
+    role   Role
+}
+type allowedActionSources []actionSource
 type allowedPath []allowedSegment
 ```
 
@@ -121,61 +128,90 @@ type allowedPath []allowedSegment
 
 ```go
 type allowedSegment interface {
-    Match(segment string, claims Claims) bool
+    Match(segment string, claims Claims, target *Target) bool
 }
 ```
 
 Implementations:
-- `allowedSegmentFixed` (eval.go:195-199) - Exact string match
-- `allowedSegmentAny` (eval.go:201-205) - Always matches
-- `allowedSegmentUser` (eval.go:207-211) - Matches `claims.User`
-- `allowedSegmentTenant` (eval.go:213-223) - Matches any tenant in `claims.Tenants`
-- `allowedSegmentEntity` (eval.go:225-235) - Matches any entity in `claims.Entities`
+- `allowedSegmentFixed` - Exact string match
+- `allowedSegmentAny` - Always matches
+- `allowedSegmentUser` - Matches `claims.User`
+- `allowedSegmentTenant` - Matches any tenant in `claims.Tenants`
+- `allowedSegmentEntity` - Matches any entity key in `claims.Entities` map
 
-### 4. Request Evaluation (eval.go:59-99)
+### 4. Request Evaluation (eval.go:74-118)
 
 `NewCheck()` returns a closure that evaluates HTTP requests:
 
 ```go
-check := func(r *http.Request) error {
+check := func(r *http.Request) (Target, error) {
     segments := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
     // 1. Check public endpoints (no auth required)
-    if publicEndpoints.match(r.Method, segments, Claims{}) {
-        return nil
+    if publicEndpoints.match(r.Method, segments, Claims{}, &target) {
+        return target, nil
     }
 
     // 2. Decode JWT claims from Authorization header
     claims, err := DecodeHTTPRequestClaims(r)
     if err != nil {
-        return err
+        return Target{}, err
     }
 
-    // 3. Check user's roles against allowed actions
-    if allowedRoles.match(r.Method, segments, claims) {
-        return nil
+    // 3. Check actions with role validation
+    if actionSources.match(r.Method, segments, claims, &target) {
+        return target, nil
     }
 
-    return ErrForbidden
+    return target, ErrForbidden
 }
 ```
 
-### 5. Matching Algorithm (eval.go:137-189)
+### 5. Matching Algorithm with Entity-Specific Roles (eval.go:156-197)
 
-Hierarchical matching with short-circuit evaluation:
+Two-pass evaluation with role validation:
 
 ```go
-allowedRoles.match() → // Iterates user's roles
-  allowedActions.match() → // Iterates role's actions
-    allowedAction.match() → // Checks method and path
-      allowedPath.match() → // Validates each segment
+func (sources allowedActionSources) match(...) bool {
+    for _, src := range sources {
+        // 1. Try to match action against request
+        if !src.action.match(method, segments, claims, &tempTarget) {
+            continue
+        }
+
+        // 2. Validate role is allowed for the matched entity context
+        if isRoleAllowed(src.role, tempTarget.Entity, claims) {
+            return true
+        }
+    }
+    return false
+}
+
+func isRoleAllowed(role Role, matchedEntity Entity, claims Claims) bool {
+    // Check base roles first
+    for _, r := range claims.Roles {
+        if r == role { return true }
+    }
+
+    // If entity matched, check entity-specific roles
+    if matchedEntity != "" {
+        if entityRoles, ok := claims.Entities[matchedEntity]; ok {
+            for _, r := range entityRoles {
+                if r == role { return true }
+            }
+        }
+    }
+    return false
+}
 ```
 
 **Key behaviors:**
 - Method must match exactly
 - For `openEnd=true`: path can be longer than template
 - For `openEnd=false`: path must match template length exactly
-- Each segment validated left-to-right with early termination
+- Entity-specific roles only apply when `{entity}` is matched in the action path
+- Base roles (`claims.Roles`) are always checked first
+- Entity roles (`claims.Entities[entity]`) are checked only when entity is matched
 
 ## JWT Integration
 

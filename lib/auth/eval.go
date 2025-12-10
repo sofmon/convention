@@ -10,8 +10,6 @@ var (
 	ErrForbidden = errors.New("authenticated user has no permission to access the requested resource")
 )
 
-type allowedRoles map[Role]allowedActions
-
 type allowedActions []allowedAction
 
 type allowedAction struct {
@@ -20,9 +18,17 @@ type allowedAction struct {
 	openEnd bool
 }
 
-func expandConfig(policy Policy) (allowed allowedRoles, publicActions allowedActions, err error) {
+// actionSource tracks which role an action came from
+type actionSource struct {
+	action allowedAction
+	role   Role
+}
 
-	allowed = make(allowedRoles)
+type allowedActionSources []actionSource
+
+func expandConfig(policy Policy) (actions allowedActionSources, publicActions allowedActions, err error) {
+
+	actions = make(allowedActionSources, 0)
 
 	for role, permissions := range policy.Roles {
 		for _, permission := range permissions {
@@ -32,23 +38,26 @@ func expandConfig(policy Policy) (allowed allowedRoles, publicActions allowedAct
 			}
 
 			for _, a := range as {
-				var allowedAction allowedAction
-				allowedAction, err = generateAllowedAction(a)
+				var aa allowedAction
+				aa, err = generateAllowedAction(a)
 				if err != nil {
 					return
 				}
-				allowed[role] = append(allowed[role], allowedAction)
+				actions = append(actions, actionSource{
+					action: aa,
+					role:   role,
+				})
 			}
 		}
 	}
 
 	for _, a := range policy.Public {
-		var allowedAction allowedAction
-		allowedAction, err = generateAllowedAction(a)
+		var aa allowedAction
+		aa, err = generateAllowedAction(a)
 		if err != nil {
 			return
 		}
-		publicActions = append(publicActions, allowedAction)
+		publicActions = append(publicActions, aa)
 	}
 
 	return
@@ -64,7 +73,7 @@ type Check func(r *http.Request) (Target, error)
 
 func NewCheck(policy Policy) (check Check, err error) {
 
-	allowedRoles, publicEndpoints, err := expandConfig(policy)
+	actionSources, publicEndpoints, err := expandConfig(policy)
 	if err != nil {
 		return
 	}
@@ -93,7 +102,7 @@ func NewCheck(policy Policy) (check Check, err error) {
 			return Target{}, err
 		}
 
-		if allowedRoles.match(
+		if actionSources.match(
 			r.Method,
 			segments,
 			claims,
@@ -144,15 +153,43 @@ func generateAllowedAction(a Action) (res allowedAction, err error) {
 	return
 }
 
-func (allowedRoles allowedRoles) match(method string, segments []string, claims Claims, target *Target) bool {
-
-	for _, role := range claims.Roles {
-		allowedActions, ok := allowedRoles[role]
-		if !ok {
+func (sources allowedActionSources) match(method string, segments []string, claims Claims, target *Target) bool {
+	for _, src := range sources {
+		// Try to match this action
+		tempTarget := Target{}
+		if !src.action.match(method, segments, claims, &tempTarget) {
 			continue
 		}
-		if allowedActions.match(method, segments, claims, target) {
+
+		// Action matched! Now validate the role is allowed for this context
+		if isRoleAllowed(src.role, tempTarget.Entity, claims) {
+			*target = tempTarget
 			return true
+		}
+	}
+	return false
+}
+
+// isRoleAllowed checks if the role is valid for the matched entity context
+func isRoleAllowed(role Role, matchedEntity Entity, claims Claims) bool {
+	// Check if role is in user's base roles
+	for _, r := range claims.Roles {
+		if r == role {
+			return true
+		}
+	}
+
+	// If no entity was matched in the path, only base roles apply
+	if matchedEntity == "" {
+		return false
+	}
+
+	// Check if role is in the matched entity's roles
+	if entityRoles, ok := claims.Entities[matchedEntity]; ok {
+		for _, r := range entityRoles {
+			if r == role {
+				return true
+			}
 		}
 	}
 
@@ -241,11 +278,12 @@ type allowedSegmentEntity struct{}
 
 func (s allowedSegmentEntity) Match(segment string, claims Claims, target *Target) bool {
 	entity := Entity(segment)
-	for _, e := range claims.Entities {
-		if e == entity {
-			target.Entity = entity
-			return true
-		}
+
+	// Check if entity exists in the Entities map
+	if _, exists := claims.Entities[entity]; exists {
+		target.Entity = entity
+		return true
 	}
+
 	return false
 }

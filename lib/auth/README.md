@@ -21,9 +21,9 @@ User authentication information stored in JWT tokens:
 ```go
 type Claims struct {
     User      User                 // User identifier
-    Entities  Entities             // Entities the user has access to
+    Entities  RolesPerEntity       // Entities with their associated roles (map[Entity]Roles)
     Tenants   Tenants              // Tenants the user belongs to
-    Roles     Roles                // Roles assigned to the user
+    Roles     Roles                // Base roles assigned to the user
     Additions map[string]any       // Additional custom claims
 }
 ```
@@ -100,10 +100,13 @@ func authMiddleware(next http.Handler) http.Handler {
 ```go
 // Generate a token
 claims := auth.Claims{
-    User:     "john.doe",
-    Tenants:  auth.Tenants{"tenant1"},
-    Entities: auth.Entities{"entity1"},
-    Roles:    auth.Roles{"user"},
+    User:    "john.doe",
+    Tenants: auth.Tenants{"tenant1"},
+    Entities: auth.RolesPerEntity{
+        "entity1": auth.Roles{"entity_admin"},  // entity1 with extra roles
+        "entity2": auth.Roles{},                // entity2 with no extra roles
+    },
+    Roles: auth.Roles{"user"},
 }
 
 token, err := auth.GenerateToken(claims)
@@ -145,6 +148,30 @@ Actions support dynamic path matching with the following templates:
 "GET /public/{any...}"
 // Matches: /public/anything/else/here
 ```
+
+## Entity-Specific Roles
+
+Entities can have associated roles that augment the user's base roles when accessing that entity:
+
+```go
+claims := auth.Claims{
+    User:    "john.doe",
+    Tenants: auth.Tenants{"tenant1"},
+    Roles:   auth.Roles{"user"},           // Base roles
+    Entities: auth.RolesPerEntity{
+        "entity1": auth.Roles{"entity_admin"}, // Additional roles for entity1
+        "entity2": auth.Roles{},               // No additional roles for entity2
+    },
+}
+```
+
+When accessing `/entities/entity1/...`:
+- Effective roles = `["user", "entity_admin"]` (merged)
+
+When accessing `/entities/entity2/...`:
+- Effective roles = `["user"]` (base roles only)
+
+Entity-specific roles are **additive** - they combine with (never replace) the user's base roles. Entity roles only apply when the action path contains `{entity}` and the entity is matched.
 
 ## Configuration
 

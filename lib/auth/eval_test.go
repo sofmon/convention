@@ -64,15 +64,26 @@ var (
 		},
 	}
 
+	entityRolePolicy = convAuth.Policy{
+		Roles: convAuth.RolePermissions{
+			"basic_user":   convAuth.Permissions{"read_entity_data"},
+			"entity_admin": convAuth.Permissions{"read_entity_data", "write_entity_data"},
+		},
+		Permissions: convAuth.PermissionActions{
+			"read_entity_data":  convAuth.Actions{"GET /entities/{entity}/data", "GET /entities/{entity}/data/{any}"},
+			"write_entity_data": convAuth.Actions{"PUT /entities/{entity}/data/{any}", "DELETE /entities/{entity}/data/{any}"},
+		},
+	}
+
 	testData = []struct {
-		name     string            // test case name
-		policy   convAuth.Policy   // access control configuration
-		user     convAuth.User     // authenticated user
-		tenants  convAuth.Tenants  // authenticated user assigned tenants
-		roles    convAuth.Roles    // authenticated user assigned roles
-		entities convAuth.Entities // authenticated user assigned entities
-		pass     []*http.Request   // requests that should pass the access check
-		block    []*http.Request   // requests that should be blocked by the access check
+		name     string                  // test case name
+		policy   convAuth.Policy         // access control configuration
+		user     convAuth.User           // authenticated user
+		tenants  convAuth.Tenants        // authenticated user assigned tenants
+		roles    convAuth.Roles          // authenticated user assigned roles
+		entities convAuth.RolesPerEntity // authenticated user assigned entities with their roles
+		pass     []*http.Request         // requests that should pass the access check
+		block    []*http.Request         // requests that should be blocked by the access check
 	}{
 		{
 			name:    "test access assets based on assigned user and tenant",
@@ -189,6 +200,61 @@ var (
 			roles:   convAuth.Roles{"xxx"},
 			pass: []*http.Request{
 				{Method: "GET", URL: &url.URL{Path: "/public/something/else/that/is/whatever"}},
+			},
+		},
+		{
+			name:   "test entity-specific roles grant additional permissions",
+			policy: entityRolePolicy,
+			user:   "user1",
+			roles:  convAuth.Roles{"basic_user"},
+			entities: convAuth.RolesPerEntity{
+				"entity1": convAuth.Roles{"entity_admin"}, // extra roles for entity1
+				"entity2": convAuth.Roles{},               // no extra roles for entity2
+			},
+			pass: []*http.Request{
+				// Can read both entities (basic_user base role)
+				{Method: "GET", URL: &url.URL{Path: "/entities/entity1/data"}},
+				{Method: "GET", URL: &url.URL{Path: "/entities/entity2/data"}},
+				// Can write to entity1 (entity_admin from Entities map)
+				{Method: "PUT", URL: &url.URL{Path: "/entities/entity1/data/item1"}},
+			},
+			block: []*http.Request{
+				// Cannot write to entity2 (no entity_admin role for entity2)
+				{Method: "PUT", URL: &url.URL{Path: "/entities/entity2/data/item1"}},
+				// Cannot access entity3 (not in Entities map)
+				{Method: "GET", URL: &url.URL{Path: "/entities/entity3/data"}},
+			},
+		},
+		{
+			name:     "test entity-specific roles without base roles",
+			policy:   entityRolePolicy,
+			user:     "user1",
+			roles:    convAuth.Roles{}, // No base roles
+			entities: convAuth.RolesPerEntity{
+				"entity1": convAuth.Roles{"entity_admin"},
+			},
+			pass: []*http.Request{
+				// Can access entity1 via entity-specific roles
+				{Method: "GET", URL: &url.URL{Path: "/entities/entity1/data"}},
+				{Method: "PUT", URL: &url.URL{Path: "/entities/entity1/data/item1"}},
+			},
+			block: []*http.Request{
+				// Cannot access entity2 (not in Entities map)
+				{Method: "GET", URL: &url.URL{Path: "/entities/entity2/data"}},
+			},
+		},
+		{
+			name:    "test base roles work for non-entity paths",
+			policy:  fullPolicy,
+			user:    "user1",
+			tenants: convAuth.Tenants{"tenant1"},
+			roles:   convAuth.Roles{"manage_own_assets"},
+			entities: convAuth.RolesPerEntity{
+				"entity1": convAuth.Roles{"some_role"},
+			},
+			pass: []*http.Request{
+				// Base roles work for paths without {entity}
+				{Method: "GET", URL: &url.URL{Path: "/tenants/tenant1/users/user1/assets"}},
 			},
 		},
 	}

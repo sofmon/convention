@@ -2,7 +2,7 @@ package auth
 
 type Claims struct {
 	User      User
-	Entities  Entities
+	Entities  RolesPerEntity
 	Tenants   Tenants
 	Roles     Roles
 	Additions map[string]any

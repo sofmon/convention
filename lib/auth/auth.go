@@ -13,6 +13,8 @@ type Entity string
 
 type Entities []Entity
 
+type RolesPerEntity map[Entity]Roles
+
 type Tenant string
 
 type Tenants []Tenant

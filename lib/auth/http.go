@@ -128,10 +128,19 @@ func DecodeToken(tokenString string) (res Claims, err error) {
 		res.User = User(user)
 	}
 
-	if entities, ok := claims[claimEntities].([]any); ok {
-		res.Entities = make(Entities, len(entities))
-		for i, entity := range entities {
-			res.Entities[i] = Entity(entity.(string))
+	if entities, ok := claims[claimEntities].(map[string]any); ok {
+		res.Entities = make(RolesPerEntity)
+		for entityKey, rolesVal := range entities {
+			entity := Entity(entityKey)
+			if rolesSlice, ok := rolesVal.([]any); ok {
+				roles := make(Roles, len(rolesSlice))
+				for i, r := range rolesSlice {
+					roles[i] = Role(r.(string))
+				}
+				res.Entities[entity] = roles
+			} else {
+				res.Entities[entity] = Roles{}
+			}
 		}
 	}
 
