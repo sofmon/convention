@@ -349,6 +349,21 @@ DynamicFormTheme(
   },
   child: MyApp(),
 )
+
+// Key-specific defaults via DynamicFormTheme.fieldConfigs
+DynamicFormTheme(
+  fieldConfigs: {
+    'id': const FieldConfig(type: FieldType.string, required: false),
+    'createdAt': const FieldConfig(type: FieldType.dateTime),
+    'updatedAt': const FieldConfig(type: FieldType.dateTime),
+    'name': const FieldConfig(hint: 'Enter name'),
+  },
+  child: DynamicFormWidget(
+    value: {'id': '123', 'name': 'John', 'createdAt': DateTime.now()},
+    // 'id', 'name', 'createdAt' get config from theme.fieldConfigs
+    mode: AutoWidgetMode.edit,
+  ),
+)
 ```
 
 **Field Name Conversion:**
@@ -439,14 +454,14 @@ class FieldConfig {
 class DynamicFormTheme extends InheritedWidget {
   final Map<FieldType, DynamicFormFieldBuilder>? builders;  // Custom default widgets
   final LabelResolver? labelResolver;                       // Project-wide label resolver
-  final FieldConfig? fieldConfig;                           // Default config for all fields
+  final Map<String, FieldConfig>? fieldConfigs;             // Default configs per field key
 
   static DynamicFormTheme? of(BuildContext context);
   DynamicFormFieldBuilder? builderFor(FieldType type);
 }
 ```
 
-**Config Priority**: `widget.fieldConfigs[key]` > `theme.fieldConfig` > `FieldConfig()`
+**Config Priority**: `widget.fieldConfigs[key]` > `theme.fieldConfigs[key]` > `FieldConfig()`
 
 ### LabelResolver
 
@@ -577,6 +592,11 @@ Benefits:
 - Easier to debug
 
 ## Version History
+
+### v2.3.0 (2025-12-08)
+- **BREAKING**: `DynamicFormTheme.fieldConfig` replaced with `DynamicFormTheme.fieldConfigs`
+- Key-specific default configurations: specify defaults for common field names (e.g., 'id', 'createdAt')
+- Config priority: `widget.fieldConfigs[key]` > `theme.fieldConfigs[key]` > `FieldConfig()`
 
 ### v2.2.0 (2025-12-04)
 - **BREAKING**: `fieldConfigs` is now optional - fields are auto-discovered from `value` map

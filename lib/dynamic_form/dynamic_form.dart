@@ -159,18 +159,19 @@ class DynamicFormWidgetState extends State<DynamicFormWidget> {
   }
 
   /// Gets the effective config for a specific field.
-  /// Priority: fieldConfigs[key] > theme.fieldConfig > default FieldConfig()
+  /// Priority: widget.fieldConfigs[key] > theme.fieldConfigs[key] > default FieldConfig()
   FieldConfig _getFieldConfig(String fieldKey) {
-    // Priority 1: Explicit fieldConfig for this field
+    // Priority 1: Explicit fieldConfig for this field from widget
     if (widget.fieldConfigs != null &&
         widget.fieldConfigs!.containsKey(fieldKey)) {
       return widget.fieldConfigs![fieldKey]!;
     }
 
-    // Priority 2: Theme's default fieldConfig
+    // Priority 2: Theme's fieldConfigs for this key
     final theme = DynamicFormTheme.of(context);
-    if (theme?.fieldConfig != null) {
-      return theme!.fieldConfig!;
+    if (theme?.fieldConfigs != null &&
+        theme!.fieldConfigs!.containsKey(fieldKey)) {
+      return theme.fieldConfigs![fieldKey]!;
     }
 
     // Priority 3: Default FieldConfig

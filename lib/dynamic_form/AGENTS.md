@@ -2,9 +2,9 @@
 
 ## Current Implementation Status
 
-**Status**: ✅ IMPLEMENTED (v2.2.0 - 2025-12-04)
+**Status**: ✅ IMPLEMENTED (v2.3.0 - 2025-12-08)
 **Architecture**: Map-based runtime system (no code generation)
-**Latest Features**: Auto-discovery, optional fieldConfigs, custom default widgets, auto-labeling
+**Latest Features**: Key-specific theme defaults, auto-discovery, optional fieldConfigs, custom default widgets, auto-labeling
 
 ---
 
@@ -29,7 +29,11 @@ DynamicFormWidget is a Flutter widget that generates view and edit UIs from `Map
 - Suffered from tree-shaking issues on web
 - Complex setup and maintenance
 
-### v2.2.0 (Current)
+### v2.3.0 (Current)
+- `fieldConfigs` in `DynamicFormTheme` for key-specific defaults (replaces `fieldConfig`)
+- Priority: `widget.fieldConfigs[key]` > `theme.fieldConfigs[key]` > `FieldConfig()`
+
+### v2.2.0
 - Auto-discovery of fields from `value` map
 - Optional `fieldConfigs` - only provides overrides
 - `fieldConfig` in `DynamicFormTheme` for project-wide defaults
@@ -144,13 +148,15 @@ class DynamicFormWidget extends StatefulWidget {
 // All fields auto-discovered from value.keys
 Iterable<String> _getFieldKeys() => widget.value.keys;
 
-// Config priority: fieldConfigs[key] > theme.fieldConfig > FieldConfig()
+// Config priority: widget.fieldConfigs[key] > theme.fieldConfigs[key] > FieldConfig()
 FieldConfig _getFieldConfig(String fieldKey) {
   if (widget.fieldConfigs?.containsKey(fieldKey) ?? false) {
     return widget.fieldConfigs![fieldKey]!;
   }
   final theme = DynamicFormTheme.of(context);
-  if (theme?.fieldConfig != null) return theme!.fieldConfig!;
+  if (theme?.fieldConfigs?.containsKey(fieldKey) ?? false) {
+    return theme!.fieldConfigs![fieldKey]!;
+  }
   return const FieldConfig();
 }
 ```
@@ -362,14 +368,21 @@ DynamicFormWidget(
 )
 ```
 
-### Pattern 3: Theme-Wide Defaults - NEW in v2.2.0
+### Pattern 3: Theme-Wide Defaults per Key - NEW in v2.3.0
 
 ```dart
-// All fields optional by default
+// Common field configurations applied by key name
 DynamicFormTheme(
-  fieldConfig: const FieldConfig(required: false),
+  fieldConfigs: {
+    'id': const FieldConfig(type: FieldType.string, required: false),
+    'createdAt': const FieldConfig(type: FieldType.dateTime),
+    'updatedAt': const FieldConfig(type: FieldType.dateTime),
+    'name': const FieldConfig(hint: 'Enter name'),
+  },
   child: DynamicFormWidget(
-    value: {'name': 'John', 'email': 'john@example.com'},
+    value: {'id': '123', 'name': 'John', 'createdAt': DateTime.now()},
+    // 'id', 'name', 'createdAt' get config from theme.fieldConfigs
+    // Other fields get default FieldConfig()
     mode: AutoWidgetMode.edit,
   ),
 )
@@ -964,6 +977,19 @@ None (no code generation in v2.0.0)
 ---
 
 ## Version History
+
+### v2.3.0 (2025-12-08) - Key-Specific Theme Defaults
+**BREAKING CHANGES**:
+- `DynamicFormTheme.fieldConfig` replaced with `DynamicFormTheme.fieldConfigs`
+- Single default for all fields replaced with key-specific defaults
+
+**Features**:
+- `fieldConfigs` in `DynamicFormTheme` allows specifying default configs per field key
+- Common field names (e.g., 'id', 'createdAt', 'updatedAt') can have consistent configuration across the app
+
+**API Changes**:
+- `DynamicFormTheme.fieldConfig: FieldConfig?` → `DynamicFormTheme.fieldConfigs: Map<String, FieldConfig>?`
+- Config priority: `widget.fieldConfigs[key]` > `theme.fieldConfigs[key]` > `FieldConfig()`
 
 ### v2.2.0 (2025-12-04) - Auto-Discovery & Optional FieldConfigs
 **BREAKING CHANGES**:
