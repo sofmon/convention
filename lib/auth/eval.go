@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
 )
 
@@ -59,6 +60,10 @@ func expandConfig(policy Policy) (actions allowedActionSources, publicActions al
 		}
 		publicActions = append(publicActions, aa)
 	}
+
+	// Sort by specificity (most specific first)
+	actions.sortBySpecificity()
+	publicActions.sortBySpecificity()
 
 	return
 }
@@ -286,4 +291,57 @@ func (s allowedSegmentEntity) Match(segment string, claims Claims, target *Targe
 	}
 
 	return false
+}
+
+// segmentSpecificity returns a score for a segment type (lower = more specific)
+func segmentSpecificity(seg allowedSegment) int {
+	switch seg.(type) {
+	case allowedSegmentFixed:
+		return 0 // Most specific - exact match
+	case allowedSegmentUser:
+		return 1 // Matches only authenticated user
+	case allowedSegmentTenant:
+		return 2 // Matches any user tenant
+	case allowedSegmentEntity:
+		return 3 // Matches any user entity
+	case allowedSegmentAny:
+		return 4 // Matches anything
+	default:
+		return 5
+	}
+}
+
+// actionSpecificity calculates total specificity for an action
+// Returns a comparable value where lower = more specific
+func actionSpecificity(a allowedAction) int {
+	score := 0
+
+	// Sum up segment specificities
+	for _, seg := range a.path {
+		score += segmentSpecificity(seg)
+	}
+
+	// openEnd ({any...}) is least specific - add penalty
+	if a.openEnd {
+		score += 1000 // Large penalty to ensure openEnd sorts last
+	}
+
+	// Longer paths are more specific (when scores are equal)
+	// Subtract path length to prefer longer exact matches
+	score -= len(a.path)
+
+	return score
+}
+
+// sortBySpecificity sorts actions from most specific to least specific
+func (sources allowedActionSources) sortBySpecificity() {
+	sort.Slice(sources, func(i, j int) bool {
+		return actionSpecificity(sources[i].action) < actionSpecificity(sources[j].action)
+	})
+}
+
+func (actions allowedActions) sortBySpecificity() {
+	sort.Slice(actions, func(i, j int) bool {
+		return actionSpecificity(actions[i]) < actionSpecificity(actions[j])
+	})
 }

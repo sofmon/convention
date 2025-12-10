@@ -83,8 +83,23 @@ func expandConfig(policy Policy) (actions allowedActionSources, publicActions al
 - Looks up each permission's actions
 - Converts each action string into `actionSource` struct (containing action + role)
 - Builds two indexes: `allowedActionSources` (authenticated) and `publicActions` (unauthenticated)
+- **Sorts actions by specificity** (most specific first) to ensure correct matching order
 
 **Key transformation:** `Action` string → `actionSource` struct via `generateAllowedAction()` (eval.go:120-154)
+
+### 1a. Action Specificity Sorting
+
+Actions are sorted from most specific to least specific before evaluation. This ensures that when multiple actions could match a request, the most specific one is evaluated first.
+
+**Specificity order** (most to least specific):
+1. Fixed segments (`path`, `to`, `something`) - score 0
+2. `{user}` - matches only authenticated user - score 1
+3. `{tenant}` - matches any user tenant - score 2
+4. `{entity}` - matches any user entity - score 3
+5. `{any}` - matches any single segment - score 4
+6. `{any...}` (openEnd) - matches any remaining segments - score +1000 penalty
+
+**Example**: `/users/john/data` (score: -3) is evaluated before `/users/{any}/data` (score: 1)
 
 ### 2. Action Parsing (eval.go:101-135)
 

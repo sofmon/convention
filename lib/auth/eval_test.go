@@ -257,6 +257,69 @@ var (
 				{Method: "GET", URL: &url.URL{Path: "/tenants/tenant1/users/user1/assets"}},
 			},
 		},
+		{
+			name: "test specificity ordering - specific path matched before wildcard",
+			policy: convAuth.Policy{
+				Roles: convAuth.RolePermissions{
+					"specific_role": convAuth.Permissions{"specific_action"},
+					"wildcard_role": convAuth.Permissions{"wildcard_action"},
+				},
+				Permissions: convAuth.PermissionActions{
+					"specific_action": convAuth.Actions{"GET /path/to/specific"},
+					"wildcard_action": convAuth.Actions{"GET /path/to/{any}"},
+				},
+			},
+			user:  "user1",
+			roles: convAuth.Roles{"specific_role"}, // Only has specific_role
+			pass: []*http.Request{
+				{Method: "GET", URL: &url.URL{Path: "/path/to/specific"}},
+			},
+			block: []*http.Request{
+				{Method: "GET", URL: &url.URL{Path: "/path/to/other"}}, // No wildcard_role
+			},
+		},
+		{
+			name: "test specificity ordering - user path before any path",
+			policy: convAuth.Policy{
+				Roles: convAuth.RolePermissions{
+					"user_role": convAuth.Permissions{"user_action"},
+					"any_role":  convAuth.Permissions{"any_action"},
+				},
+				Permissions: convAuth.PermissionActions{
+					"user_action": convAuth.Actions{"GET /users/{user}/data"},
+					"any_action":  convAuth.Actions{"GET /users/{any}/data"},
+				},
+			},
+			user:  "user1",
+			roles: convAuth.Roles{"user_role"}, // Only has user_role
+			pass: []*http.Request{
+				{Method: "GET", URL: &url.URL{Path: "/users/user1/data"}},
+			},
+			block: []*http.Request{
+				{Method: "GET", URL: &url.URL{Path: "/users/other/data"}}, // No any_role
+			},
+		},
+		{
+			name: "test specificity ordering - fixed path before open end",
+			policy: convAuth.Policy{
+				Roles: convAuth.RolePermissions{
+					"fixed_role":   convAuth.Permissions{"fixed_action"},
+					"openend_role": convAuth.Permissions{"openend_action"},
+				},
+				Permissions: convAuth.PermissionActions{
+					"fixed_action":   convAuth.Actions{"GET /api/v1/users"},
+					"openend_action": convAuth.Actions{"GET /api/{any...}"},
+				},
+			},
+			user:  "user1",
+			roles: convAuth.Roles{"fixed_role"}, // Only has fixed_role
+			pass: []*http.Request{
+				{Method: "GET", URL: &url.URL{Path: "/api/v1/users"}},
+			},
+			block: []*http.Request{
+				{Method: "GET", URL: &url.URL{Path: "/api/v1/other"}}, // No openend_role
+			},
+		},
 	}
 )
 

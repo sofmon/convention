@@ -149,6 +149,32 @@ Actions support dynamic path matching with the following templates:
 // Matches: /public/anything/else/here
 ```
 
+## Action Specificity
+
+When multiple actions could match a request, the system evaluates them in order of specificity (most specific first). This ensures that exact matches take precedence over wildcard patterns.
+
+**Specificity order** (most to least specific):
+
+1. **Fixed segments** (`users`, `data`, `specific`) - Exact string match
+2. **`{user}`** - Matches only the authenticated user
+3. **`{tenant}`** - Matches any tenant the user belongs to
+4. **`{entity}`** - Matches any entity the user has access to
+5. **`{any}`** - Matches any single segment
+6. **`{any...}`** - Matches any remaining segments (wildcard suffix)
+
+### Why This Matters
+
+Consider a configuration with overlapping paths:
+
+```go
+Permissions: auth.PermissionActions{
+    "view_specific": auth.Actions{"GET /reports/summary"},
+    "view_any":      auth.Actions{"GET /reports/{any}"},
+}
+```
+
+A request to `/reports/summary` will match the more specific `view_specific` permission first. This allows you to grant broad access with wildcards while restricting specific paths to different roles.
+
 ## Entity-Specific Roles
 
 Entities can have associated roles that augment the user's base roles when accessing that entity:
