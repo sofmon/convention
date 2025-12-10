@@ -12,9 +12,7 @@ func (ctx Context) WithNow(now time.Time) Context {
 			contextKeyNow,
 			now,
 		),
-	}.WithLogger(
-		ctx.Logger().With(loggerKeyNow, now),
-	)
+	}
 }
 
 func (ctx Context) Now() time.Time {

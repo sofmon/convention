@@ -103,7 +103,7 @@ When adding a new context value:
    contextKeyNewThing contextKey = iota
    ```
 
-2. Add logger key if needed:
+2. Add logger key if needed (in `ctx.go`):
    ```go
    loggerKeyNewThing = "new_thing"
    ```
@@ -113,9 +113,7 @@ When adding a new context value:
    func (ctx Context) WithNewThing(value NewType) Context {
        return Context{
            context.WithValue(ctx.Context, contextKeyNewThing, value),
-       }.WithLogger(
-           ctx.Logger().With(loggerKeyNewThing, value),
-       )
+       }
    }
 
    func (ctx Context) NewThing() NewType {
@@ -126,6 +124,15 @@ When adding a new context value:
        return obj.(NewType)
    }
    ```
+
+4. If you want the value to appear in log output, add it to `Logger()` in `log.go`:
+   ```go
+   if newThing, ok := ctx.Value(contextKeyNewThing).(NewType); ok {
+       attrs = append(attrs, loggerKeyNewThing, newThing)
+   }
+   ```
+
+**Note:** The logger is built lazily from context values when `Logger()` is called. Do NOT call `WithLogger()` in `With*` methods - this prevents duplicate keys in log output.
 
 ### Error Handling
 

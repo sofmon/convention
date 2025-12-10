@@ -17,9 +17,7 @@ func (ctx Context) WithWorkflow(workflow Workflow) Context {
 			contextKeyWorkflow,
 			workflow,
 		),
-	}.WithLogger(
-		ctx.Logger().With(loggerKeyWorkflow, workflow),
-	)
+	}
 }
 
 func (ctx Context) Workflow() Workflow {

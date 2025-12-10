@@ -14,9 +14,7 @@ func (ctx Context) WithClaims(claims convAuth.Claims) Context {
 			contextKeyClaims,
 			claims,
 		),
-	}.WithLogger(
-		ctx.Logger().With(loggerKeyUser, claims.User),
-	)
+	}
 }
 
 func (ctx Context) Claims() (claims convAuth.Claims) {

@@ -9,9 +9,7 @@ func (ctx Context) WithAgentClaims() Context {
 			contextKeyUseAgentClaims,
 			true,
 		),
-	}.WithLogger(
-		ctx.Logger().With(loggerKeyUseAgentClaims, true),
-	)
+	}
 }
 
 func (ctx Context) mustUseAgentClaims() bool {

@@ -13,9 +13,7 @@ func (ctx Context) WithAction(action convAuth.Action) Context {
 			contextKeyAction,
 			action,
 		),
-	}.WithLogger(
-		ctx.Logger().With(loggerKeyAction, action),
-	)
+	}
 }
 
 func (ctx Context) Action() convAuth.Action {

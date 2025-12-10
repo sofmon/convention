@@ -23,9 +23,7 @@ func (ctx Context) WithScope(scope string, args ...any) Context {
 			contextKeyScope,
 			scope,
 		),
-	}.WithLogger(
-		ctx.Logger().With(loggerKeyScope, scope),
-	)
+	}
 }
 
 func (ctx Context) WithScopef(format string, a ...any) Context {

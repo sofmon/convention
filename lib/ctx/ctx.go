@@ -56,17 +56,7 @@ func WrapContext(parent context.Context, claims convAuth.Claims) (ctx Context) {
 	ctx.Context = context.WithValue(ctx.Context, contextKeyClaims, claims)
 	ctx.Context = context.WithValue(ctx.Context, contextKeyWorkflow, workflow)
 	ctx.Context = context.WithValue(ctx.Context, contextKeyScope, scope)
-
-	ctx.Context = context.WithValue(ctx.Context, contextKeyLogger,
-		defaultLogger().
-			With(
-				loggerKeyEnv, env,
-				loggerKeyAgent, agent,
-				loggerKeyWorkflow, workflow,
-				loggerKeyUser, claims.User,
-				loggerKeyScope, scope,
-			),
-	)
+	// NOTE: No logger pre-built here - Logger() builds it lazily from context values
 
 	return
 }
