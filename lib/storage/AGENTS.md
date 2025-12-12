@@ -15,9 +15,9 @@ The storage package is a **dual-language implementation** (Go + Flutter/Dart) fo
 | File | Purpose | Key Types |
 |------|---------|-----------|
 | `provider.go` | Provider interface and registry | `Provider`, `ProviderFactory`, `RegisterProvider()`, `NewProvider()` |
-| `storage.go` | Main facade, config loading | `Storage`, `New()`, `NewWithCredentials()`, `NewWithProvider()` |
+| `storage.go` | Main facade, config loading | `Storage`, `New()`, `NewWithCredentials()`, `NewWithProvider()`, `WithRootPath()` |
 | `gcs.go` | Google Cloud Storage implementation | `gcsProvider` (implements `Provider`) |
-| `handler.go` | HTTP handler for Flutter clients | `NewHandler()` returns `convAPI.Raw` |
+| `handler.go` | HTTP handler for Flutter clients | `NewHandler(s, prefix)` returns `convAPI.Raw` |
 
 ### Dart Files
 
@@ -64,6 +64,34 @@ The storage package is a **dual-language implementation** (Go + Flutter/Dart) fo
 2. **Custom exceptions**: Define specific exception types extending a base `StorageException`.
 
 3. **StatefulWidget pattern**: Use for widgets with internal state, expose methods via `GlobalKey<WidgetState>`.
+
+## Root Path Configuration
+
+Storage instances can have a root path prefix that is automatically prepended to all operations:
+
+```go
+// Create storage with root path
+s, _ := storage.New()
+tenant := s.WithRootPath("tenant-123/data")
+
+// All operations now use the root path prefix
+tenant.Save(ctx, "images/photo.jpg", data)   // stores at "tenant-123/data/images/photo.jpg"
+tenant.Load(ctx, "images/photo.jpg")         // loads from "tenant-123/data/images/photo.jpg"
+tenant.Delete(ctx, "images/photo.jpg")       // deletes "tenant-123/data/images/photo.jpg"
+tenant.Exists(ctx, "images/photo.jpg")       // checks "tenant-123/data/images/photo.jpg"
+
+// Get current root path
+rootPath := tenant.RootPath()  // returns "tenant-123/data"
+
+// Root paths can be chained
+envStorage := s.WithRootPath("production")
+tenantStorage := envStorage.WithRootPath("tenant-001")  // -> "production/tenant-001"
+```
+
+### Use Cases
+- Multi-tenant storage isolation
+- Environment separation (dev/staging/prod)
+- Organizational prefixing
 
 ## Adding a New Storage Provider
 
@@ -126,12 +154,16 @@ The storage package is a **dual-language implementation** (Go + Flutter/Dart) fo
 The handler is a single `convAPI.Raw` that dispatches based on HTTP method.
 The path prefix is defined by the service embedding the handler.
 
-Usage in service API:
+### Handler Usage
+
 ```go
 type API struct {
     Storage convAPI.Raw `api:"* /asset/v1/storage/{any...}"`
 }
-api := &API{Storage: storage.NewHandler(s)}
+
+// The prefix parameter specifies the URL prefix to strip from incoming requests
+// PUT /asset/v1/storage/images/photo.jpg -> stores to "images/photo.jpg"
+api := &API{Storage: storage.NewHandler(s, "/asset/v1/storage")}
 ```
 
 The `*` method in the api tag matches any HTTP method (wildcard).
@@ -141,13 +173,30 @@ The handler internally routes by method:
 - DELETE → Delete
 - HEAD → Exists
 
-Path extraction in `handler.go` looks for `/storage/` segment:
+The `prefix` parameter:
+- Specifies the URL path prefix to strip from incoming requests
+- Pass empty string `""` if no prefix stripping is needed
+- Handles leading/trailing slashes automatically
+
+### Combining Root Path with Handler Prefix
+
+For multi-tenant scenarios where you want both features:
+
 ```go
-func extractStoragePath(urlPath string) string {
-    if idx := strings.Index(urlPath, "/storage/"); idx != -1 {
-        return strings.Trim(urlPath[idx+len("/storage/"):], "/")
+func NewMyServiceAPI(ctx convCtx.Context, tenantID string) (*MyServiceAPI, error) {
+    s, err := storage.New()
+    if err != nil {
+        return nil, err
     }
-    return strings.Trim(urlPath, "/")
+
+    // Create tenant-specific storage
+    tenantStorage := s.WithRootPath("tenants/" + tenantID)
+
+    return &MyServiceAPI{
+        // Handler strips URL prefix, Storage adds root path
+        // PUT /asset/v1/storage/file.txt -> stores to "tenants/{tenantID}/file.txt"
+        Storage: storage.NewHandler(tenantStorage, "/asset/v1/storage"),
+    }, nil
 }
 ```
 

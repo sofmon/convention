@@ -21,10 +21,17 @@ import (
 //	type API struct {
 //	    Storage convAPI.Raw `api:"* /asset/v1/storage/{any...}"`
 //	}
-//	api := &API{Storage: storage.NewHandler(s)}
-func NewHandler(s *Storage) convAPI.Raw {
+//	api := &API{Storage: storage.NewHandler(s,"/asset/v1/storage")}
+func NewHandler(s *Storage, prefix string) convAPI.Raw {
+	if prefix != "" {
+		prefix = "/" + strings.Trim(prefix, "/")
+	}
+
 	return convAPI.NewRaw(func(ctx convCtx.Context, w http.ResponseWriter, r *http.Request) {
-		path := extractStoragePath(r.URL.Path)
+		path := r.URL.Path
+		if prefix != "" && strings.HasPrefix(path, prefix) {
+			path = strings.Trim(path[len(prefix):], "/")
+		}
 
 		switch r.Method {
 		case http.MethodPut:
@@ -40,15 +47,6 @@ func NewHandler(s *Storage) convAPI.Raw {
 				convAPI.ErrorCodeBadRequest, "method not allowed", nil)
 		}
 	})
-}
-
-// extractStoragePath extracts the file path from the URL.
-// Finds "/storage/" segment and returns everything after it.
-func extractStoragePath(urlPath string) string {
-	if idx := strings.Index(urlPath, "/storage/"); idx != -1 {
-		return strings.Trim(urlPath[idx+len("/storage/"):], "/")
-	}
-	return strings.Trim(urlPath, "/")
 }
 
 func handleSave(ctx convCtx.Context, s *Storage, path string, w http.ResponseWriter, r *http.Request) {

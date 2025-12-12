@@ -5,10 +5,12 @@ A dual-language storage package for Go and Flutter/Dart that provides cloud stor
 ## Features
 
 - **Simple API**: `Save`, `Load`, `Delete`, `Exists` operations
+- **Root Path Support**: Configure a root path prefix for all operations (multi-tenant, environment isolation)
 - **Go**: Direct cloud storage access with service account authentication
 - **Flutter/Dart**: Backend proxy for secure authentication (no private keys in client)
 - **Extensible**: Provider interface for adding new storage backends (S3, Azure, etc.)
 - **Drop Zone Widget**: Flutter widget for drag-and-drop file uploads
+- **Configurable URL Prefix**: Strip service prefixes from incoming handler URLs
 
 ## Architecture
 
@@ -52,6 +54,33 @@ exists, err := s.Exists(ctx, "documents/report.pdf")
 err = s.Delete(ctx, "temp/old-file.txt")
 ```
 
+### Root Path (Multi-tenant)
+
+Use root paths to isolate storage for different tenants, environments, or logical partitions:
+
+```go
+// Create base storage from config
+s, err := storage.New()
+if err != nil {
+    return err
+}
+
+// Create tenant-specific storage instances
+tenant1Storage := s.WithRootPath("tenants/tenant-001")
+tenant2Storage := s.WithRootPath("tenants/tenant-002")
+
+// Operations are automatically scoped to the tenant
+tenant1Storage.Save(ctx, "data/file.txt", data)  // -> "tenants/tenant-001/data/file.txt"
+tenant2Storage.Save(ctx, "data/file.txt", data)  // -> "tenants/tenant-002/data/file.txt"
+
+// Root path chaining
+envStorage := s.WithRootPath("production")
+tenantStorage := envStorage.WithRootPath("tenant-001")  // -> "production/tenant-001"
+
+// Check current root path
+fmt.Println(tenantStorage.RootPath())  // "production/tenant-001"
+```
+
 ### HTTP Handler for Flutter Clients
 
 Include the storage handler in your service API to enable Flutter client access:
@@ -74,7 +103,9 @@ func NewMyServiceAPI(ctx convCtx.Context) (*MyServiceAPI, error) {
     }
 
     return &MyServiceAPI{
-        Storage: storage.NewHandler(s),
+        // The prefix parameter strips the URL prefix from incoming requests
+        // PUT /asset/v1/storage/images/photo.jpg -> stores to "images/photo.jpg"
+        Storage: storage.NewHandler(s, "/asset/v1/storage"),
     }, nil
 }
 ```
@@ -88,8 +119,8 @@ The handler dispatches to different operations based on HTTP method:
 | `DELETE` | `/asset/v1/storage/{path...}` | Delete file |
 | `HEAD` | `/asset/v1/storage/{path...}` | Check if file exists |
 
-The path prefix (e.g., `/asset/v1/storage`) is defined by you in the API struct tag.
-The wildcard `*` method matches all HTTP methods, and the handler routes internally.
+The `prefix` parameter specifies the URL path prefix to strip from incoming requests.
+Pass empty string `""` if no prefix stripping is needed.
 
 All endpoints require JWT Bearer token in `Authorization` header.
 
