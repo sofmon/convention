@@ -1,23 +1,24 @@
 # Storage Package
 
-A dual-language storage package for Go and Flutter/Dart that provides cloud storage operations with a simple, unified API.
+A Go storage package that provides cloud storage operations with a simple API. This package handles server-side storage logic including direct cloud access and HTTP handlers for client applications.
+
+> For Flutter/Dart client implementation, see `lib/storage_client`.
 
 ## Features
 
 - **Simple API**: `Save`, `Load`, `Delete`, `Exists` operations
 - **Root Path Support**: Configure a root path prefix for all operations (multi-tenant, environment isolation)
-- **Go**: Direct cloud storage access with service account authentication
-- **Flutter/Dart**: Backend proxy for secure authentication (no private keys in client)
+- **Direct Cloud Access**: Service account authentication for Go services
+- **HTTP Handler**: Proxy endpoint for Flutter/Dart clients
 - **Extensible**: Provider interface for adding new storage backends (S3, Azure, etc.)
-- **Drop Zone Widget**: Flutter widget for drag-and-drop file uploads
 - **Configurable URL Prefix**: Strip service prefixes from incoming handler URLs
 
 ## Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Flutter App    │────▶│   Go Backend    │────▶│  Cloud Storage  │
-│  (Storage)      │ JWT │   (Handler)     │     │  (GCS/S3/etc)   │
+│  Client App     │────▶│   Go Backend    │────▶│  Cloud Storage  │
+│  (HTTP Client)  │ JWT │   (Handler)     │     │  (GCS/S3/etc)   │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
                               │
                               ▼
@@ -27,7 +28,7 @@ A dual-language storage package for Go and Flutter/Dart that provides cloud stor
                         └─────────────────┘
 ```
 
-## Go Usage
+## Usage
 
 ### Direct Storage Access
 
@@ -81,9 +82,9 @@ tenantStorage := envStorage.WithRootPath("tenant-001")  // -> "production/tenant
 fmt.Println(tenantStorage.RootPath())  // "production/tenant-001"
 ```
 
-### HTTP Handler for Flutter Clients
+### HTTP Handler for Clients
 
-Include the storage handler in your service API to enable Flutter client access:
+Include the storage handler in your service API to enable client access:
 
 ```go
 import (
@@ -124,77 +125,6 @@ Pass empty string `""` if no prefix stripping is needed.
 
 All endpoints require JWT Bearer token in `Authorization` header.
 
-## Flutter/Dart Usage
-
-### Storage Client
-
-```dart
-import 'package:ingreed/lib/util/storage/storage.dart';
-
-final storage = Storage(
-  basePath: 'https://api.example.com/asset/v1/storage',  // must match server API path
-  getToken: () async => authService.currentToken,
-);
-
-// Save a file
-await storage.save('images/photo.jpg', imageBytes);
-
-// Load a file
-final data = await storage.load('images/photo.jpg');
-
-// Check if file exists
-final exists = await storage.exists('documents/report.pdf');
-
-// Delete a file
-await storage.delete('temp/old-file.txt');
-```
-
-### Drop Zone Widget
-
-```dart
-import 'package:ingreed/lib/util/storage/storage.dart';
-import 'package:ingreed/lib/util/storage/drop_zone.dart';
-
-final dropZoneKey = GlobalKey<StorageDropZoneState>();
-
-StorageDropZone(
-  key: dropZoneKey,
-  storage: storage,
-  pathBuilder: (fileName) => 'uploads/${DateTime.now().millisecondsSinceEpoch}/$fileName',
-  onUploadComplete: (path) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Uploaded to: $path')),
-    );
-  },
-  onError: (error) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Upload failed: $error')),
-    );
-  },
-  child: Container(
-    width: 300,
-    height: 200,
-    decoration: BoxDecoration(
-      border: Border.all(color: Colors.grey),
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: const Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.cloud_upload, size: 48, color: Colors.grey),
-          SizedBox(height: 8),
-          Text('Drop files here or click to upload'),
-        ],
-      ),
-    ),
-  ),
-)
-
-// Upload programmatically (e.g., from file picker)
-dropZoneKey.currentState?.uploadFile('photo.jpg', imageBytes);
-```
-
 ## Configuration
 
 Create these config files in `/etc/agent/`:
@@ -228,8 +158,6 @@ Example `storage_credentials` content:
 
 ## Error Handling
 
-### Go
-
 All methods return errors following the standard Go pattern:
 
 ```go
@@ -239,33 +167,14 @@ if err != nil {
 }
 ```
 
-### Flutter/Dart
-
-The package defines custom exceptions:
-
-```dart
-try {
-  final data = await storage.load('path/to/file');
-} on StorageNotFoundException {
-  // File doesn't exist
-} on StorageException catch (e) {
-  // Other storage error
-  print('Error: ${e.message}, status: ${e.statusCode}');
-}
-```
-
 ## File Structure
 
 ```
-lib/util/storage/
-├── provider.go         # Provider interface and registry (Go)
-├── storage.go          # Storage facade (Go)
-├── gcs.go              # Google Cloud Storage provider (Go)
-├── handler.go          # HTTP handler for Flutter proxy (Go)
-├── provider.dart       # StorageProvider abstract class (Dart)
-├── http_provider.dart  # HTTP provider implementation (Dart)
-├── storage.dart        # Storage class (Dart)
-├── drop_zone.dart      # Drag-and-drop upload widget (Dart)
-├── README.md           # This file
-└── AGENTS.md           # Documentation for AI agents
+lib/storage/
+├── provider.go     # Provider interface and registry
+├── storage.go      # Storage facade, config loading
+├── gcs.go          # Google Cloud Storage provider
+├── handler.go      # HTTP handler for client proxy
+├── README.md       # This file
+└── AGENTS.md       # Documentation for AI agents
 ```

@@ -4,33 +4,22 @@ This document provides context for AI agents working on the storage package.
 
 > IMPORTANT: AI agents must treat AGENTS.md and README.md as authoritative living documents. Any change to the implementation that affects behaviors must be mirrored in both files. The code and documentation must never drift apart. When the implementation changes, these documents must be updated immediately so they always reflect the current system.
 
+> For Flutter/Dart client implementation, see `lib/storage_client`.
+
 ## Package Overview
 
-The storage package is a **dual-language implementation** (Go + Flutter/Dart) for cloud storage operations. It follows the project's established patterns and conventions.
+The storage package is a **Go implementation** for server-side cloud storage operations. It provides direct cloud access for Go services and HTTP handlers for client applications.
 
 ## File Responsibilities
-
-### Go Files
 
 | File | Purpose | Key Types |
 |------|---------|-----------|
 | `provider.go` | Provider interface and registry | `Provider`, `ProviderFactory`, `RegisterProvider()`, `NewProvider()` |
 | `storage.go` | Main facade, config loading | `Storage`, `New()`, `NewWithCredentials()`, `NewWithProvider()`, `WithRootPath()` |
 | `gcs.go` | Google Cloud Storage implementation | `gcsProvider` (implements `Provider`) |
-| `handler.go` | HTTP handler for Flutter clients | `NewHandler(s, prefix)` returns `convAPI.Raw` |
-
-### Dart Files
-
-| File | Purpose | Key Types |
-|------|---------|-----------|
-| `provider.dart` | Abstract provider interface | `StorageProvider`, `StorageException`, `StorageNotFoundException` |
-| `http_provider.dart` | HTTP backend implementation | `HttpStorageProvider` (implements `StorageProvider`) |
-| `storage.dart` | Main facade for Flutter | `Storage` |
-| `drop_zone.dart` | Drag-and-drop widget | `StorageDropZone`, `StorageDropZoneState` |
+| `handler.go` | HTTP handler for client proxy | `NewHandler(s, prefix)` returns `convAPI.Raw` |
 
 ## Codebase Patterns to Follow
-
-### Go Patterns
 
 1. **Context pattern**: All significant functions take `ctx convCtx.Context` as first parameter:
    ```go
@@ -50,20 +39,6 @@ The storage package is a **dual-language implementation** (Go + Flutter/Dart) fo
 5. **Error responses**: Use `convAPI.ServeError(ctx, w, status, code, message, err)`.
 
 6. **Provider registration**: Use `init()` function with `RegisterProvider("name", factoryFunc)`.
-
-### Dart Patterns
-
-1. **Callback-based auth**: Pass `getToken` callback, don't store tokens directly:
-   ```dart
-   Storage({
-     required String baseUrl,
-     required Future<String> Function() getToken,
-   })
-   ```
-
-2. **Custom exceptions**: Define specific exception types extending a base `StorageException`.
-
-3. **StatefulWidget pattern**: Use for widgets with internal state, expose methods via `GlobalKey<WidgetState>`.
 
 ## Root Path Configuration
 
@@ -95,7 +70,7 @@ tenantStorage := envStorage.WithRootPath("tenant-001")  // -> "production/tenant
 
 ## Adding a New Storage Provider
 
-### Go (e.g., S3)
+Example: Adding S3 support
 
 1. Create `s3.go`:
    ```go
@@ -124,30 +99,6 @@ tenantStorage := envStorage.WithRootPath("tenant-001")  // -> "production/tenant
 2. Add dependency: `go get github.com/aws/aws-sdk-go-v2/...`
 
 3. Run: `go mod tidy && go mod vendor`
-
-### Dart (e.g., Local Storage)
-
-1. Create `local_provider.dart`:
-   ```dart
-   import 'provider.dart';
-
-   class LocalStorageProvider implements StorageProvider {
-       final String basePath;
-       LocalStorageProvider(this.basePath);
-
-       @override
-       String get name => 'local';
-
-       @override
-       Future<void> save(String path, Uint8List data) async { /* ... */ }
-       // ... other methods
-   }
-   ```
-
-2. Use with Storage:
-   ```dart
-   final storage = Storage.withProvider(LocalStorageProvider('/path'));
-   ```
 
 ## HTTP Endpoint Structure
 
@@ -202,9 +153,8 @@ func NewMyServiceAPI(ctx convCtx.Context, tenantID string) (*MyServiceAPI, error
 
 ## Testing Considerations
 
-- **Go**: Test providers in isolation using mock storage clients
-- **Dart**: Use `Storage.withProvider()` with mock providers for unit tests
-- **Integration**: Test HTTP handler with actual Storage instance
+- Test providers in isolation using mock storage clients
+- Integration test HTTP handler with actual Storage instance
 
 ## Common Modifications
 
@@ -213,22 +163,14 @@ func NewMyServiceAPI(ctx convCtx.Context, tenantID string) (*MyServiceAPI, error
 1. Add to `Provider` interface in `provider.go`
 2. Implement in `gcsProvider` in `gcs.go`
 3. Add wrapper in `Storage` in `storage.go`
-4. Add HTTP endpoint in `handler.go` (if needed for Flutter)
-5. Add to `StorageProvider` in `provider.dart`
-6. Implement in `HttpStorageProvider` in `http_provider.dart`
-7. Add wrapper in `Storage` in `storage.dart`
+4. Add HTTP endpoint in `handler.go` (if needed for clients)
 
 ### Change HTTP path prefix
 
-The path prefix is now configurable:
-- **Go**: Define in your service API struct tag (e.g., `api:"* /myservice/v1/storage/{any...}"`)
-- **Dart**: Pass full URL as `basePath` to `Storage()` constructor (e.g., `basePath: 'https://api.example.com/myservice/v1/storage'`)
+The path prefix is configurable:
+- Define in your service API struct tag (e.g., `api:"* /myservice/v1/storage/{any...}"`)
 
 The handler extracts the file path by looking for the `/storage/` segment in the URL.
-
-### Add upload progress tracking (Dart)
-
-Modify `HttpStorageProvider.save()` to use `http.StreamedRequest` and emit progress events.
 
 ## Configuration
 
@@ -263,25 +205,15 @@ Config files in `/etc/agent/`:
 
 ## Dependencies
 
-### Go
 - `cloud.google.com/go/storage` - GCS client
 - `google.golang.org/api/option` - Client options (credentials)
-- `ingreed/lib/util/ctx` - Context with scope tracking
-- `ingreed/lib/util/cfg` - Configuration loading
-- `ingreed/lib/util/api` - HTTP handler patterns
-
-### Dart
-- `http` package - HTTP client
-- `flutter/material.dart` - Widget framework
+- `github.com/sofmon/convention/lib/ctx` - Context with scope tracking
+- `github.com/sofmon/convention/lib/cfg` - Configuration loading
+- `github.com/sofmon/convention/lib/api` - HTTP handler patterns
 
 ## Build Commands
 
 ```bash
-# Go
-go build ./lib/util/storage/...
-go test ./lib/util/storage/...
-
-# Dart
-flutter analyze lib/util/storage/
-flutter test
+go build ./lib/storage/...
+go test ./lib/storage/...
 ```
