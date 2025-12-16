@@ -26,7 +26,7 @@ func portForAPITest(t *testing.T) int {
 
 func TestMain(m *testing.M) {
 
-	err := convCfg.SetConfigLocation("../../../.secret")
+	err := convCfg.SetConfigLocation("../../.secret")
 	if err != nil {
 		err = fmt.Errorf("SetConfigLocation failed: %w", err)
 		panic(err)

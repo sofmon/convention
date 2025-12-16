@@ -2,7 +2,10 @@ package api
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
 	"reflect"
 	"sort"
 
@@ -29,11 +32,18 @@ func NewServer(ctx convCtx.Context, host string, port int, policy convAuth.Polic
 	srv = &server{
 		&http.Server{
 			Addr:    fmt.Sprintf("%s:%d", host, port),
-			Handler: NewHandler(ctx, host, port, check, svc),
+			Handler: NewHandler(ctx, host, port, check, svc, false),
 		},
 	}
 
 	return
+}
+
+func (srv *server) EnableCallsLogging() {
+	h, ok := srv.httpServer.Handler.(*httpHandler)
+	if ok {
+		h.logCalls = true
+	}
 }
 
 func (srv *server) ListenAndServe() (err error) {
@@ -47,8 +57,8 @@ func (srv *server) Shutdown(ctx convCtx.Context) (err error) {
 	return srv.httpServer.Shutdown(ctx)
 }
 
-func NewHandler(ctx convCtx.Context, host string, port int, check convAuth.Check, svc any) http.Handler {
-	return httpHandler{ctx, computeEndpoints(host, port, svc), check}
+func NewHandler(ctx convCtx.Context, host string, port int, check convAuth.Check, svc any, logCalls bool) http.Handler {
+	return &httpHandler{ctx, computeEndpoints(host, port, svc), check, logCalls}
 }
 
 func computeEndpoints(host string, port int, api any) (eps endpoints) {
@@ -83,12 +93,13 @@ func computeEndpoints(host string, port int, api any) (eps endpoints) {
 }
 
 type httpHandler struct {
-	ctx   convCtx.Context
-	eps   endpoints
-	check convAuth.Check
+	ctx      convCtx.Context
+	eps      endpoints
+	check    convAuth.Check
+	logCalls bool
 }
 
-func (h httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := h.ctx.
 		WithRequest(r)
 
@@ -109,8 +120,18 @@ func (h httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if h.logCalls {
+		logCall(ctx, w, r, func(w http.ResponseWriter, r *http.Request) {
+			execIfMatch(ctx, w, r, h.eps)
+		})
+	} else {
+		execIfMatch(ctx, w, r, h.eps)
+	}
+}
+
+func execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *http.Request, eps endpoints) {
 	ok := false
-	for _, ep := range h.eps {
+	for _, ep := range eps {
 		ok = ep.execIfMatch(ctx, w, r)
 		if ok {
 			break
@@ -119,4 +140,88 @@ func (h httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		ServeError(ctx, w, http.StatusNotFound, ErrorCodeNotFound, "Endpoint not found", nil)
 	}
+}
+
+func logCall(ctx convCtx.Context, w http.ResponseWriter, r *http.Request, handle func(w http.ResponseWriter, r *http.Request)) {
+
+	logger := ctx.Logger()
+	if logger == nil {
+		handle(w, r)
+		return
+	}
+
+	rec := httptest.NewRecorder()
+
+	// temporary hide the Authorization header while we dump the request
+	authHeader := r.Header.Get(convAuth.HttpHeaderAuthorization)
+	if authHeader != "" {
+		l := len(authHeader) - 10
+		if l < 0 {
+			l = len(authHeader)
+		}
+		r.Header.Set(convAuth.HttpHeaderAuthorization, "..."+authHeader[l:])
+	}
+
+	contentHeader := r.Header.Get("Content-Type")
+	logBody := contentHeader == "application/json" ||
+		contentHeader == "application/xml" ||
+		contentHeader == "application/yaml" ||
+		contentHeader == "text/plain" ||
+		contentHeader == "text/html"
+
+	reqDump, err := httputil.DumpRequest(r, logBody)
+	if err != nil {
+		logger.Warn("error dumping request for logging", "error", err)
+		return
+	}
+
+	// restore the Authorization header
+	if authHeader != "" {
+		r.Header.Set(convAuth.HttpHeaderAuthorization, authHeader)
+	}
+
+	handle(rec, r)
+
+	res := rec.Result()
+
+	contentHeader = res.Header.Get("Content-Type")
+	logBody = contentHeader == "application/json" ||
+		contentHeader == "application/xml" ||
+		contentHeader == "application/yaml" ||
+		contentHeader == "text/plain" ||
+		contentHeader == "text/html"
+
+	resDump, err := httputil.DumpResponse(res, logBody)
+	if err != nil {
+		logger.Warn("error dumping response for logging", "error", err)
+		return
+	}
+
+	for k, v := range res.Header {
+		for _, vv := range v {
+			w.Header().Add(k, vv)
+		}
+	}
+
+	w.WriteHeader(res.StatusCode)
+
+	if res.Body != nil {
+		resBody, err := io.ReadAll(res.Body)
+		if err != nil {
+			logger.Warn("error reading response body after logging", "error", err)
+			return
+		}
+		_, err = w.Write(resBody)
+		if err != nil {
+			logger.Warn("error writing response body after logging", "error", err)
+			return
+		}
+	}
+
+	logger.
+		With(
+			"request", string(reqDump),
+			"response", string(resDump),
+		).
+		Info("API call")
 }
