@@ -3,11 +3,13 @@ package api
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
 	"reflect"
 	"sort"
+	"strings"
 
 	convAuth "github.com/sofmon/convention/lib/auth"
 	convCfg "github.com/sofmon/convention/lib/cfg"
@@ -175,6 +177,9 @@ func logCall(ctx convCtx.Context, w http.ResponseWriter, r *http.Request, handle
 		return
 	}
 
+	// capture request headers while Authorization is still masked
+	reqHeaderAttrs := headersToAttrs(r.Header)
+
 	// restore the Authorization header
 	if authHeader != "" {
 		r.Header.Set(convAuth.HttpHeaderAuthorization, authHeader)
@@ -218,10 +223,24 @@ func logCall(ctx convCtx.Context, w http.ResponseWriter, r *http.Request, handle
 		}
 	}
 
+	resHeaderAttrs := headersToAttrs(res.Header)
+
 	logger.
 		With(
 			"request", string(reqDump),
 			"response", string(resDump),
+			slog.Group("headers",
+				slog.Group("request", reqHeaderAttrs...),
+				slog.Group("response", resHeaderAttrs...),
+			),
 		).
 		Info("API call")
+}
+
+func headersToAttrs(headers http.Header) []any {
+	var attrs []any
+	for name, values := range headers {
+		attrs = append(attrs, name, strings.Join(values, ", "))
+	}
+	return attrs
 }
