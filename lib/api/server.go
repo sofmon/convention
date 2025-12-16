@@ -1,12 +1,13 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"net/http/httputil"
 	"reflect"
 	"sort"
 	"strings"
@@ -152,86 +153,91 @@ func logCall(ctx convCtx.Context, w http.ResponseWriter, r *http.Request, handle
 		return
 	}
 
-	rec := httptest.NewRecorder()
+	// Check if request body should be logged
+	reqContentType := r.Header.Get("Content-Type")
+	reqHasBody := (r.ContentLength != 0 && r.Body != nil) || r.Header.Get("Transfer-Encoding") == "chunked"
+	reqLogBody := reqHasBody && shouldLogBody(reqContentType)
 
-	// temporary hide the Authorization header while we dump the request
-	authHeader := r.Header.Get(convAuth.HttpHeaderAuthorization)
-	if authHeader != "" {
+	var reqBody []byte
+	if reqLogBody {
+		reqBody, _ = io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(reqBody))
+	}
+
+	// Copy headers and mask Authorization for logging
+	reqHeaders := make(http.Header)
+	for k, v := range r.Header {
+		reqHeaders[k] = v
+	}
+	if authHeader := reqHeaders.Get(convAuth.HttpHeaderAuthorization); authHeader != "" {
 		l := len(authHeader) - 10
 		if l < 0 {
 			l = len(authHeader)
 		}
-		r.Header.Set(convAuth.HttpHeaderAuthorization, "..."+authHeader[l:])
+		reqHeaders.Set(convAuth.HttpHeaderAuthorization, "..."+authHeader[l:])
 	}
 
-	contentHeader := r.Header.Get("Content-Type")
-	logBody := contentHeader == "application/json" ||
-		contentHeader == "application/xml" ||
-		contentHeader == "application/yaml" ||
-		contentHeader == "text/plain" ||
-		contentHeader == "text/html"
-
-	reqDump, err := httputil.DumpRequest(r, logBody)
-	if err != nil {
-		logger.Warn("error dumping request for logging", "error", err)
-		return
-	}
-
-	// capture request headers while Authorization is still masked
-	reqHeaderAttrs := headersToAttrs(r.Header)
-
-	// restore the Authorization header
-	if authHeader != "" {
-		r.Header.Set(convAuth.HttpHeaderAuthorization, authHeader)
-	}
-
+	rec := httptest.NewRecorder()
 	handle(rec, r)
-
 	res := rec.Result()
 
-	contentHeader = res.Header.Get("Content-Type")
-	logBody = contentHeader == "application/json" ||
-		contentHeader == "application/xml" ||
-		contentHeader == "application/yaml" ||
-		contentHeader == "text/plain" ||
-		contentHeader == "text/html"
-
-	resDump, err := httputil.DumpResponse(res, logBody)
-	if err != nil {
-		logger.Warn("error dumping response for logging", "error", err)
-		return
+	// Read response body (always needed to forward to client)
+	var resBody []byte
+	if res.Body != nil {
+		resBody, _ = io.ReadAll(res.Body)
 	}
 
+	// Check if response body should be logged
+	resContentType := res.Header.Get("Content-Type")
+	resHasBody := len(resBody) > 0
+	resLogBody := resHasBody && shouldLogBody(resContentType)
+
+	// Write response to actual writer
 	for k, v := range res.Header {
 		for _, vv := range v {
 			w.Header().Add(k, vv)
 		}
 	}
-
 	w.WriteHeader(res.StatusCode)
-
-	if res.Body != nil {
-		resBody, err := io.ReadAll(res.Body)
-		if err != nil {
-			logger.Warn("error reading response body after logging", "error", err)
-			return
-		}
-		_, err = w.Write(resBody)
+	if len(resBody) > 0 {
+		_, err := w.Write(resBody)
 		if err != nil {
 			logger.Warn("error writing response body after logging", "error", err)
 			return
 		}
 	}
 
-	resHeaderAttrs := headersToAttrs(res.Header)
+	// Build log entry
+	var reqBodyLog any
+	if reqHasBody {
+		if reqLogBody {
+			reqBodyLog = processBody(reqContentType, reqBody)
+		} else {
+			reqBodyLog = "{{binary data}}"
+		}
+	}
+
+	var resBodyLog any
+	if resHasBody {
+		if resLogBody {
+			resBodyLog = processBody(resContentType, resBody)
+		} else {
+			resBodyLog = "{{binary data}}"
+		}
+	}
 
 	logger.
 		With(
-			"request", string(reqDump),
-			"response", string(resDump),
-			slog.Group("headers",
-				slog.Group("request", reqHeaderAttrs...),
-				slog.Group("response", resHeaderAttrs...),
+			slog.Group("request",
+				"method", r.Method,
+				"url", r.URL.String(),
+				slog.Group("headers", headersToAttrs(reqHeaders)...),
+				"body", reqBodyLog,
+			),
+			slog.Group("response",
+				"status", res.StatusCode,
+				slog.Group("headers", headersToAttrs(res.Header)...),
+				"body", resBodyLog,
 			),
 		).
 		Info("API call")
@@ -243,4 +249,32 @@ func headersToAttrs(headers http.Header) []any {
 		attrs = append(attrs, name, strings.Join(values, ", "))
 	}
 	return attrs
+}
+
+func shouldLogBody(contentType string) bool {
+	return strings.HasPrefix(contentType, "application/json") ||
+		strings.HasPrefix(contentType, "application/xml") ||
+		strings.HasPrefix(contentType, "application/yaml") ||
+		strings.HasPrefix(contentType, "text/plain") ||
+		strings.HasPrefix(contentType, "text/html")
+}
+
+func processBody(contentType string, body []byte) any {
+	if len(body) == 0 {
+		return nil
+	}
+	if strings.HasPrefix(contentType, "application/json") {
+		var v any
+		if json.Unmarshal(body, &v) == nil {
+			return v
+		}
+		return string(body)
+	}
+	if strings.HasPrefix(contentType, "application/xml") ||
+		strings.HasPrefix(contentType, "application/yaml") ||
+		strings.HasPrefix(contentType, "text/plain") ||
+		strings.HasPrefix(contentType, "text/html") {
+		return string(body)
+	}
+	return "{{binary data}}"
 }
