@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
+	"sync"
 
 	convAuth "github.com/sofmon/convention/lib/auth"
 	convCfg "github.com/sofmon/convention/lib/cfg"
@@ -57,7 +58,9 @@ func (conn connection) Open() (*sql.DB, error) {
 type config map[Vault]map[convAuth.Tenant]connections
 
 var (
-	dbs map[Vault]map[convAuth.Tenant][]*sql.DB
+	dbs     map[Vault]map[convAuth.Tenant][]*sql.DB
+	dbsOnce sync.Once
+	dbsErr  error
 
 	ErrNoDBTenant = errors.New("db is not configured with provided tenant")
 	ErrNoDBVault  = errors.New("db is not configured with provided vault")
@@ -65,11 +68,16 @@ var (
 
 func Open() (err error) {
 
-	if dbs != nil {
-		return
-	}
+	dbsOnce.Do(func() {
+		dbsErr = openInternal()
+	})
 
-	dbs = make(map[Vault]map[convAuth.Tenant][]*sql.DB)
+	return dbsErr
+}
+
+func openInternal() (err error) {
+
+	newDbs := make(map[Vault]map[convAuth.Tenant][]*sql.DB)
 
 	cfg, err := convCfg.Object[config](configKeyDatabase)
 	if err != nil {
@@ -77,17 +85,20 @@ func Open() (err error) {
 	}
 
 	for vault, vaultCfg := range cfg {
-		dbs[vault] = make(map[convAuth.Tenant][]*sql.DB)
+		newDbs[vault] = make(map[convAuth.Tenant][]*sql.DB)
 		for tenant, tenantCfg := range vaultCfg {
 			for _, conn := range tenantCfg {
 				db, err := conn.Open()
 				if err != nil {
 					return err
 				}
-				dbs[vault][tenant] = append(dbs[vault][tenant], db)
+				newDbs[vault][tenant] = append(newDbs[vault][tenant], db)
 			}
 		}
 	}
+
+	// Assign only after fully populated to avoid race conditions
+	dbs = newDbs
 
 	return
 }
@@ -108,6 +119,8 @@ func Close() (err error) {
 	}
 
 	dbs = nil
+	dbsOnce = sync.Once{} // Reset so Open() can be called again
+	dbsErr = nil
 	return
 }
 
