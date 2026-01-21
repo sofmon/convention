@@ -35,7 +35,7 @@ func NewServer(ctx convCtx.Context, host string, port int, policy convAuth.Polic
 	srv = &server{
 		&http.Server{
 			Addr:    fmt.Sprintf("%s:%d", host, port),
-			Handler: NewHandler(ctx, host, port, check, svc, false),
+			Handler: NewHandler(ctx, host, port, check, svc),
 		},
 	}
 
@@ -46,6 +46,13 @@ func (srv *server) EnableCallsLogging() {
 	h, ok := srv.httpServer.Handler.(*httpHandler)
 	if ok {
 		h.logCalls = true
+	}
+}
+
+func (srv *server) SkipDecodeClaims() {
+	h, ok := srv.httpServer.Handler.(*httpHandler)
+	if ok {
+		h.skipDecodeClaims = true
 	}
 }
 
@@ -60,8 +67,8 @@ func (srv *server) Shutdown(ctx convCtx.Context) (err error) {
 	return srv.httpServer.Shutdown(ctx)
 }
 
-func NewHandler(ctx convCtx.Context, host string, port int, check convAuth.Check, svc any, logCalls bool) http.Handler {
-	return &httpHandler{ctx, computeEndpoints(host, port, svc), check, logCalls}
+func NewHandler(ctx convCtx.Context, host string, port int, check convAuth.Check, svc any) http.Handler {
+	return &httpHandler{ctx, computeEndpoints(host, port, svc), check, false, false}
 }
 
 func computeEndpoints(host string, port int, api any) (eps endpoints) {
@@ -96,15 +103,15 @@ func computeEndpoints(host string, port int, api any) (eps endpoints) {
 }
 
 type httpHandler struct {
-	ctx      convCtx.Context
-	eps      endpoints
-	check    convAuth.Check
-	logCalls bool
+	ctx              convCtx.Context
+	eps              endpoints
+	check            convAuth.Check
+	logCalls         bool
+	skipDecodeClaims bool
 }
 
 func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx := h.ctx.
-		WithRequest(r)
+	ctx := h.ctx.WithRequest(r, !h.skipDecodeClaims)
 
 	_, err := h.check(r)
 	if err != nil {

@@ -63,7 +63,7 @@ func (x *InOut[inT, outT]) execIfMatch(ctx convCtx.Context, w http.ResponseWrite
 		return true
 	}
 
-	out, err := x.fn(ctx.WithRequest(r), in)
+	out, err := x.fn(ctx, in)
 	if err != nil {
 		var apiErr *Error
 		if errors.As(err, &apiErr) {

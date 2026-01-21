@@ -50,7 +50,7 @@ func (x *Trigger) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *htt
 		return false
 	}
 
-	err := x.fn(ctx.WithRequest(r))
+	err := x.fn(ctx)
 	if err != nil {
 		var apiErr *Error
 		if errors.As(err, &apiErr) {

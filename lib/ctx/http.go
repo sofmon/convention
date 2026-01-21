@@ -17,7 +17,7 @@ const (
 	HTTPHeaderTimeNow       = "Time-Now"
 )
 
-func (ctx Context) WithRequest(r *http.Request) (res Context) {
+func (ctx Context) WithRequest(r *http.Request, decodeClaims bool) (res Context) {
 
 	res = Context{
 		context.WithValue(
@@ -34,16 +34,18 @@ func (ctx Context) WithRequest(r *http.Request) (res Context) {
 	action := convAuth.Action(fmt.Sprintf("%s %s", r.Method, r.URL.Path))
 	res = res.WithAction(action)
 
-	if claims, err := convAuth.DecodeHTTPRequestClaims(r); err == nil {
-		res = res.WithClaims(claims)
-	} else {
-		if err != convAuth.ErrMissingAuthorizationHeader {
-			res.Logger().Warn("failed to decode HTTP request claims", "error", err.Error())
+	if decodeClaims {
+		if claims, err := convAuth.DecodeHTTPRequestClaims(r); err == nil {
+			res = res.WithClaims(claims)
+		} else {
+			if err != convAuth.ErrMissingAuthorizationHeader {
+				res.Logger().Warn("failed to decode HTTP request claims", "error", err.Error())
+			}
+			// empty the claims to ensure that the context
+			// would not provide the agent claims without
+			// explicit ctx.WithAgentClaims() call
+			res = res.WithClaims(convAuth.Claims{})
 		}
-		// empty the claims to ensure that the context
-		// would not provide the agent claims without
-		// explicit ctx.WithAgentClaims() call
-		res = res.WithClaims(convAuth.Claims{})
 	}
 
 	if !ctx.IsProdEnv() && r != nil {

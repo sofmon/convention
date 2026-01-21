@@ -55,7 +55,7 @@ func (x *Out[outT]) execIfMatch(ctx convCtx.Context, w http.ResponseWriter, r *h
 		return false
 	}
 
-	out, err := x.fn(ctx.WithRequest(r))
+	out, err := x.fn(ctx)
 	if err != nil {
 		var apiErr *Error
 		if errors.As(err, &apiErr) {
