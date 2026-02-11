@@ -226,10 +226,10 @@ var (
 			},
 		},
 		{
-			name:     "test entity-specific roles without base roles",
-			policy:   entityRolePolicy,
-			user:     "user1",
-			roles:    convAuth.Roles{}, // No base roles
+			name:   "test entity-specific roles without base roles",
+			policy: entityRolePolicy,
+			user:   "user1",
+			roles:  convAuth.Roles{}, // No base roles
 			entities: convAuth.RolesPerEntity{
 				"entity1": convAuth.Roles{"entity_admin"},
 			},
