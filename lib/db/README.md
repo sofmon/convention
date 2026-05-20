@@ -181,9 +181,14 @@ objWithMd, err := objSet.Tenant(tenant).SelectByIDWithMetadata(ctx, id)
 // Update: Fails if object doesn't exist
 err := objSet.Tenant(tenant).Update(ctx, obj)
 
-// SafeUpdate: Optimistic concurrency control
-// Only updates if 'from' matches current state
+// SafeUpdate: Optimistic concurrency control.
+// Only updates if 'from' matches current state. On a stale 'from' returns
+// ErrCASConflict; on a row missing returns ErrObjectNotFound; on a contended
+// FOR UPDATE NOWAIT (Postgres only) returns ErrLockNotAvailable.
 err := objSet.Tenant(tenant).SafeUpdate(ctx, from, to)
+if errors.Is(err, db.ErrCASConflict) {
+    // 409 — caller's snapshot is stale; reload and retry.
+}
 ```
 
 ### Delete Operations
@@ -223,9 +228,35 @@ current, _ := objSet.Tenant(tenant).SelectByID(ctx, id)
 modified := *current
 modified.Field = "new value"
 
-// Only succeeds if current hasn't changed
+// Only succeeds if current hasn't changed since SelectByID.
 err := objSet.Tenant(tenant).SafeUpdate(ctx, *current, modified)
+switch {
+case errors.Is(err, db.ErrObjectNotFound):
+    // 404 — row deleted out from under us.
+case errors.Is(err, db.ErrLockNotAvailable):
+    // 409 — another writer holds the row (Postgres NOWAIT contention).
+case errors.Is(err, db.ErrCASConflict):
+    // 409 — row mutated between SelectByID and SafeUpdate; reload and retry.
+}
 ```
+
+**Error handling:**
+
+| Error                 | Cause                                                         | Typical HTTP |
+|-----------------------|---------------------------------------------------------------|--------------|
+| `ErrObjectNotFound`   | Row missing for the given ID                                  | 404          |
+| `ErrLockNotAvailable` | Another transaction holds `FOR UPDATE NOWAIT` on the row      | 409          |
+| `ErrCASConflict`      | Row mutated between caller's load and `SafeUpdate`            | 409          |
+
+`SafeUpdate` is a true CAS only on Postgres. On SQLite the row lock is elided;
+the comparator guards against stale-`from` callers but two truly concurrent
+writers can race past it. Use SQLite for tests, Postgres for production.
+
+The comparator normalizes both the current row and your `from` snapshot
+through the object set's compute hooks before comparing, so it compares
+business state and ignores embedded metadata (audit stamps). You may load
+`from` via any path (`SelectByID`, `Process`, hand-built) — just don't mutate
+its business fields between load and call.
 
 ### Pessimistic Locking
 
