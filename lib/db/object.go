@@ -192,9 +192,9 @@ ON "` + runtimeTableName + `" USING gin ("text_search");
 `
 	}
 
-	for _, dbs := range tenantDBs {
-		for _, db := range dbs {
-			_, err = db.Exec(createScript)
+	for _, entries := range tenantDBs {
+		for _, entry := range entries {
+			_, err = entry.db.Exec(createScript)
 			if err != nil {
 				return
 			}

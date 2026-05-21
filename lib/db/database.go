@@ -57,8 +57,13 @@ func (conn connection) Open() (*sql.DB, error) {
 
 type config map[Vault]map[convAuth.Tenant]connections
 
+type engineDB struct {
+	db     *sql.DB
+	engine Engine
+}
+
 var (
-	dbs     map[Vault]map[convAuth.Tenant][]*sql.DB
+	dbs     map[Vault]map[convAuth.Tenant][]engineDB
 	dbsOnce sync.Once
 	dbsErr  error
 
@@ -77,7 +82,7 @@ func Open() (err error) {
 
 func openInternal() (err error) {
 
-	newDbs := make(map[Vault]map[convAuth.Tenant][]*sql.DB)
+	newDbs := make(map[Vault]map[convAuth.Tenant][]engineDB)
 
 	cfg, err := convCfg.Object[config](configKeyDatabase)
 	if err != nil {
@@ -85,14 +90,14 @@ func openInternal() (err error) {
 	}
 
 	for vault, vaultCfg := range cfg {
-		newDbs[vault] = make(map[convAuth.Tenant][]*sql.DB)
+		newDbs[vault] = make(map[convAuth.Tenant][]engineDB)
 		for tenant, tenantCfg := range vaultCfg {
 			for _, conn := range tenantCfg {
 				db, err := conn.Open()
 				if err != nil {
 					return err
 				}
-				newDbs[vault][tenant] = append(newDbs[vault][tenant], db)
+				newDbs[vault][tenant] = append(newDbs[vault][tenant], engineDB{db: db, engine: conn.Engine})
 			}
 		}
 	}
@@ -104,12 +109,12 @@ func openInternal() (err error) {
 }
 
 func Close() (err error) {
-	for _, db := range dbs {
-		for _, db := range db {
-			for _, db := range db {
+	for _, vault := range dbs {
+		for _, entries := range vault {
+			for _, entry := range entries {
 				err = errors.Join(
 					err,
-					db.Close(),
+					entry.db.Close(),
 				)
 			}
 		}
@@ -129,6 +134,20 @@ func indexByShardKey(key string, count int) int {
 }
 
 func DBs(vault Vault, tenant convAuth.Tenant) ([]*sql.DB, error) {
+
+	entries, err := engineDBs(vault, tenant)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]*sql.DB, len(entries))
+	for i, e := range entries {
+		out[i] = e.db
+	}
+	return out, nil
+}
+
+func engineDBs(vault Vault, tenant convAuth.Tenant) ([]engineDB, error) {
 
 	err := Open()
 	if err != nil {
@@ -182,6 +201,25 @@ func dbByShardKey(vault Vault, tenant convAuth.Tenant, key string) (*sql.DB, err
 	}
 
 	return dbs[0], nil
+}
+
+func dbByShardKeyWithEngine(vault Vault, tenant convAuth.Tenant, key string) (*sql.DB, Engine, error) {
+
+	entries, err := engineDBs(vault, tenant)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if len(entries) <= 0 {
+		return nil, "", ErrNoDBTenant
+	}
+
+	if len(entries) > 1 {
+		e := entries[indexByShardKey(key, len(entries))]
+		return e.db, e.engine, nil
+	}
+
+	return entries[0].db, entries[0].engine, nil
 }
 
 func dbsByShardKeys(vault Vault, tenant convAuth.Tenant, keys ...string) ([]*sql.DB, error) {

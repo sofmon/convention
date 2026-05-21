@@ -113,12 +113,16 @@ Simple modulo distribution using CRC32 checksum. This provides:
 **Important**: Resharding is NOT supported. Changing shard count requires data migration.
 
 ### Connection Management
-[database.go:66-93](database.go#L66-L93)
 
-- `dbs map[Vault]map[Tenant][]*sql.DB`: Global connection registry
-- `Open()`: Lazy initialization, idempotent (checks if `dbs != nil`)
-- `Close()`: Closes all connections, sets `dbs = nil`
-- Connections are opened from config at `configKeyDatabase = "database"`
+- `dbs map[Vault]map[Tenant][]engineDB`: Global connection registry. Each
+  `engineDB` pairs a `*sql.DB` with its `Engine` so dialect-aware primitives
+  (notably `SafeUpdate`'s lock clause) can pick the right SQL fragment.
+- Public `DBs(vault, tenant) ([]*sql.DB, error)` projects to `*sql.DB` only —
+  signature is preserved for downstream callers. Engine-aware access is
+  internal-only via `dbByShardKeyWithEngine`.
+- `Open()`: Lazy initialization, idempotent (guarded by `sync.Once`).
+- `Close()`: Closes all connections, sets `dbs = nil`, resets the once-guard.
+- Connections are opened from config at `configKeyDatabase = "database"`.
 
 ### Configuration Loading
 [database.go:74](database.go#L74)
@@ -270,20 +274,49 @@ for _, compute := range tos.compute {
 ### Locking Mechanisms
 
 #### Optimistic Locking (SafeUpdate)
-[update.go:127](update.go#L127)
 
 ```go
-row := tx.QueryRow(`SELECT "object", md5("object"), ...
-    FROM "`+tos.table.RuntimeTableName+`" WHERE "id"=$1 FOR UPDATE NOWAIT`, fromKey.ID)
+row := tx.QueryRow(`SELECT "object", "created_at", ...
+    FROM "`+tos.table.RuntimeTableName+`" WHERE "id"=$1`+lockClause, fromKey.ID)
 ```
 
-- Uses `FOR UPDATE NOWAIT` for row-level lock
-- Computes MD5 hash of current object
-- Compares `from` parameter with current state (line 149)
-- Update includes hash check in WHERE clause (line 165)
-- Returns error if object changed since read
+- Engine-aware lock clause: `FOR UPDATE NOWAIT` on Postgres, empty on SQLite
+  (the registry tracks `Engine` alongside each `*sql.DB`).
+- Scans the JSONB column into `[]byte`, then `json.Unmarshal` into `objT` — same
+  pattern as `SelectByID`. `database/sql` cannot `Scan` JSONB bytes directly
+  into a struct.
+- Comparator normalizes BOTH sides through the same `decode → compute-hook →
+  marshal` pipeline (with the just-loaded row metadata) before comparing:
+  the current row (`cmp`) and a clone of the caller's `from`. Comparing
+  Go-marshalled bytes on both sides avoids false-conflicts from Postgres JSONB
+  key-reordering / whitespace normalization, and running the compute hooks on
+  both sides makes the guard insensitive to embedded metadata (e.g. audit
+  stamps) that legitimately differs by load path and timestamp precision. Net:
+  the CAS guard compares **business state only**, so `from` may be loaded via
+  any path (`SelectByID`, `Process`, hand-built) without false-conflicting.
+  Trade-off: a write that only advances metadata (no business change) does not
+  trip the guard (no ABA-via-metadata detection).
+- Returns exported sentinels (`errors.Is`-friendly):
+  - `ErrObjectNotFound` when the row is missing.
+  - `ErrLockNotAvailable` when `FOR UPDATE NOWAIT` raises SQLSTATE 55P03
+    (classified via the unexported `sqlStateProvider` interface — works for
+    both `lib/pq.Error` and `pgx`-style errors without a direct driver dep).
+  - `ErrCASConflict` when the marshal-compare disagrees (or, defensively, when
+    a SQLite-mode UPDATE affects zero rows).
 
-**Note**: `FOR UPDATE NOWAIT` fails immediately if row is locked by another transaction.
+**Dialect split:**
+
+- **Postgres (production):** real CAS. `FOR UPDATE NOWAIT` blocks concurrent
+  writers between SELECT and UPDATE; contention surfaces as
+  `ErrLockNotAvailable`.
+- **SQLite (in-memory test only):** lock clause elided. The comparator
+  still catches stale-`from` callers, but two truly concurrent writers can
+  race past it with no conflict raised. Acceptable because SQLite usage is
+  single-process unit testing.
+
+Callers must not mutate `from`'s business state between load and call. The
+comparator is metadata-insensitive (both sides are compute-normalized), so
+embedded audit stamps need not match — only business fields do.
 
 #### Pessimistic Locking
 [lock.go:50-54](lock.go#L50-L54)
