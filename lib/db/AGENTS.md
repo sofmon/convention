@@ -318,31 +318,49 @@ Callers must not mutate `from`'s business state between load and call. The
 comparator is metadata-insensitive (both sides are compute-normalized), so
 embedded audit stamps need not match — only business fields do.
 
-#### Pessimistic Locking
-[lock.go:50-54](lock.go#L50-L54)
+#### Pessimistic Locking — two modes
 
+`Lock(ctx, obj, desc, opts ...LockOption)` has two modes selected by `WithLease`.
+
+**Default mode (sticky mutex — unchanged):**
 ```go
 res, err := db.Exec(`INSERT INTO "`+tos.table.LockTableName+`"
     ("id","created_at","description")
     VALUES($1,$2,$3)
     ON CONFLICT ("id") DO NOTHING;`, key.ID, ctx.Now(), desc)
 ```
+- `ON CONFLICT DO NOTHING`; `RowsAffected()==0` → returns `nil` (already locked); never stolen.
+- Lock persists until `lock.Unlock()` (unconditional `DELETE WHERE id`).
+- This is what request-scoped callers rely on (e.g. a resend cooldown, a "someone is already processing" guard). **Do not change it.**
 
-- Uses `ON CONFLICT DO NOTHING` to make lock acquisition atomic
-- Checks `RowsAffected()` to determine if lock was acquired
-- Returns `nil` lock if already locked
-- Lock persists until explicitly unlocked via `lock.Unlock()`
+**Lease mode (`WithLease(d)` — for long-lived / scheduled holders):**
+```go
+res, err := db.ExecContext(ctx.Context, `INSERT INTO "`+lockTable+`" AS l
+    ("id","created_at","description") VALUES($1,$2,$3)
+    ON CONFLICT ("id") DO UPDATE SET "created_at"=$2, "description"=$3
+    WHERE l."created_at" < $4;`, key.ID, now, desc, now.Add(-d))
+```
+- A lock whose `created_at` is older than `now-lease` is **stolen** (so a holder that crashed without unlocking does not block forever). `RowsAffected()==1` ⇒ acquired or stole; `==0` ⇒ a live (recently-renewed) lock is held.
+- `created_at` doubles as the heartbeat timestamp. The holder must `Renew(ctx)` well within `lease` (advances `created_at WHERE id AND description=owner`; returns `ErrLeaseLost` on 0 rows).
+- `Unlock()` is **owner-safe** for lease locks (`DELETE WHERE id AND description=owner`, bounded context); returns `ErrLeaseLost` if the lock was stolen away.
+- The stored `description` is the caller's text plus a **per-acquisition token** (`desc + "\x1f" + uuid`), so `Renew`/`Unlock` match one specific acquisition — two holders that pass the same `desc` are never confused. `PreviousOwner()` strips the token back to the caller text.
+- `UpdateGuarded(ctx, obj)` persists the locked object **only while this caller still owns the lease**, with no read-then-write window. In one transaction it first renews the lease row with an owner-checked `UPDATE lock SET created_at=now WHERE id AND description=owner` — 0 rows ⇒ `ErrLeaseLost`; otherwise it holds that row's write lock, so a concurrent steal (the `ON CONFLICT DO UPDATE`) blocks until commit. It renews the lease **once more right before commit**, so even a long transaction leaves a timestamp newer than any blocked waiter's cutoff (the waiter called `Lock` before this commit) — that waiter cannot take over. The runtime write + ownership claim are thus mutually exclusive with stealing. Not context-cancellable, so it still lands and decides ownership during shutdown.
+- `Stolen()` / `PreviousOwner()` expose advisory acquisition metadata (set when an expired row was replaced) for logging.
+- The explicit target alias `AS l` keeps the predicate bound to the existing row (never `excluded.created_at`) and is accepted by both Postgres and SQLite. The cutoff is computed in Go and bound as a parameter (no SQL interval arithmetic) for cross-engine parity. Steal comparison assumes NTP-synced clocks.
 
 **Lock struct**:
 ```go
 type Lock[objT, idT, shardKeyT] struct {
-    tos TenantObjectSet[objT, idT, shardKeyT]
-    si  int  // Shard index
-    id  idT
+    tos   TenantObjectSet[objT, idT, shardKeyT]
+    si    int           // Shard index
+    id    idT
+    owner string        // "" => legacy lock; else desc + per-acquisition token
+    stolen        bool   // advisory: replaced an expired row
+    previousOwner string // advisory: description of the replaced row
 }
 ```
 
-Stores shard index to unlock on correct database instance.
+Stores shard index to unlock on the correct database instance; `owner` makes Renew/Unlock owner-safe in lease mode.
 
 ### Multi-Shard Operations
 
