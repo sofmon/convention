@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -175,51 +176,75 @@ func shutdown(ctx convCtx.Context, timeout time.Duration, phases [][]Stage) (err
 	return errors.Join(stageErrors...)
 }
 
-type stageResult struct {
-	index int
-	err   error
+type stageOutcome struct {
+	published bool
+	err       error
 }
 
-func runPhase(ctx convCtx.Context, stages []Stage) (stageErrors []error) {
-	results := make(chan stageResult, len(stages))
+type phaseResults struct {
+	mutex     sync.Mutex
+	stages    []Stage
+	outcomes  []stageOutcome
+	remaining int
+	done      chan struct{}
+}
+
+func newPhaseResults(stages []Stage) *phaseResults {
+	results := &phaseResults{
+		stages:    stages,
+		outcomes:  make([]stageOutcome, len(stages)),
+		remaining: len(stages),
+		done:      make(chan struct{}),
+	}
+	if len(stages) == 0 {
+		close(results.done)
+	}
+	return results
+}
+
+func (r *phaseResults) publish(index int, err error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if r.outcomes[index].published {
+		return
+	}
+	r.outcomes[index] = stageOutcome{published: true, err: err}
+	r.remaining--
+	if r.remaining == 0 {
+		close(r.done)
+	}
+}
+
+func (r *phaseResults) snapshot(unpublishedErr error) []error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	stageErrors := make([]error, len(r.stages))
+	for i, outcome := range r.outcomes {
+		err := unpublishedErr
+		if outcome.published {
+			err = outcome.err
+		}
+		stageErrors[i] = stageError(r.stages[i].Name, err)
+	}
+	return stageErrors
+}
+
+func runPhase(ctx convCtx.Context, stages []Stage) []error {
+	results := newPhaseResults(stages)
 	for i, stage := range stages {
 		go func() {
-			results <- stageResult{index: i, err: invokeStage(ctx, stage.Fn)}
+			results.publish(i, invokeStage(ctx, stage.Fn))
 		}()
 	}
 
-	stageErrors = make([]error, len(stages))
-	completed := make([]bool, len(stages))
-	remaining := len(stages)
-	for remaining > 0 {
-		select {
-		case result := <-results:
-			completed[result.index] = true
-			remaining--
-			if result.err != nil {
-				stageErrors[result.index] = fmt.Errorf("%s: %w", stages[result.index].Name, result.err)
-			}
-		case <-ctx.Done():
-			for {
-				select {
-				case result := <-results:
-					completed[result.index] = true
-					remaining--
-					if result.err != nil {
-						stageErrors[result.index] = fmt.Errorf("%s: %w", stages[result.index].Name, result.err)
-					}
-				default:
-					for i, stage := range stages {
-						if !completed[i] {
-							stageErrors[i] = fmt.Errorf("%s: %w", stage.Name, ctx.Err())
-						}
-					}
-					return stageErrors
-				}
-			}
-		}
+	select {
+	case <-results.done:
+		return results.snapshot(nil)
+	case <-ctx.Done():
+		return results.snapshot(ctx.Err())
 	}
-	return stageErrors
 }
 
 func invokeStage(ctx convCtx.Context, fn func(convCtx.Context) error) (err error) {
@@ -238,8 +263,15 @@ func invokeStage(ctx convCtx.Context, fn func(convCtx.Context) error) (err error
 func appendDeadlineErrors(stageErrors []error, phases [][]Stage, deadlineErr error) []error {
 	for _, phase := range phases {
 		for _, stage := range phase {
-			stageErrors = append(stageErrors, fmt.Errorf("%s: %w", stage.Name, deadlineErr))
+			stageErrors = append(stageErrors, stageError(stage.Name, deadlineErr))
 		}
 	}
 	return stageErrors
+}
+
+func stageError(name string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", name, err)
 }

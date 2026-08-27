@@ -100,6 +100,108 @@ func TestShutdownStopsContextAwareStageAtDeadline(t *testing.T) {
 	}
 }
 
+func TestPhaseResultsPreservePublishedResultsAtDeadline(t *testing.T) {
+	sentinel := errors.New("stage completed at deadline")
+	stages := []Stage{
+		{Name: "failed"},
+		{Name: "successful"},
+		{Name: "unpublished"},
+	}
+	results := newPhaseResults(stages)
+	results.publish(0, sentinel)
+	results.publish(1, nil)
+
+	stageErrors := results.snapshot(context.DeadlineExceeded)
+
+	if !errors.Is(stageErrors[0], sentinel) {
+		t.Fatalf("failed stage error = %v, want published error %v", stageErrors[0], sentinel)
+	}
+	if stageErrors[1] != nil {
+		t.Fatalf("successful stage error = %v, want nil", stageErrors[1])
+	}
+	if !errors.Is(stageErrors[2], context.DeadlineExceeded) {
+		t.Fatalf("unpublished stage error = %v, want context deadline exceeded", stageErrors[2])
+	}
+
+	joined := errors.Join(stageErrors...)
+	failedIndex := strings.Index(joined.Error(), "failed: stage completed at deadline")
+	unpublishedIndex := strings.Index(joined.Error(), "unpublished: context deadline exceeded")
+	if failedIndex < 0 || unpublishedIndex <= failedIndex {
+		t.Fatalf("joined error = %q, want stage errors in declaration order", joined)
+	}
+}
+
+func TestPhaseResultsSignalCompletionAfterEveryStagePublishes(t *testing.T) {
+	stages := []Stage{{Name: "first"}, {Name: "second"}}
+	results := newPhaseResults(stages)
+
+	results.publish(0, nil)
+	results.publish(0, errors.New("duplicate result"))
+	select {
+	case <-results.done:
+		t.Fatal("phase completed before every stage published")
+	default:
+	}
+
+	results.publish(1, nil)
+	select {
+	case <-results.done:
+	default:
+		t.Fatal("phase did not complete after every stage published")
+	}
+	if stageErrors := results.snapshot(nil); stageErrors[0] != nil || stageErrors[1] != nil {
+		t.Fatalf("snapshot errors = %v, want both successful", stageErrors)
+	}
+}
+
+func TestRunPhasePreservesCompletedStageWhenPeerTimesOut(t *testing.T) {
+	sentinel := errors.New("completed stage failure")
+	ctx := testContext()
+	bounded, cancel := context.WithTimeout(ctx.Context, 100*time.Millisecond)
+	ctx.Context = bounded
+	defer cancel()
+
+	releaseStage := make(chan struct{})
+	releaseStageOnce := sync.OnceFunc(func() { close(releaseStage) })
+	t.Cleanup(releaseStageOnce)
+	stageFinished := make(chan struct{})
+
+	stageErrors := runPhase(ctx, []Stage{
+		{
+			Name: "completed",
+			Fn: func(convCtx.Context) error {
+				return sentinel
+			},
+		},
+		{
+			Name: "stuck",
+			Fn: func(convCtx.Context) error {
+				defer close(stageFinished)
+				<-releaseStage
+				return nil
+			},
+		},
+	})
+
+	if !errors.Is(stageErrors[0], sentinel) {
+		t.Fatalf("completed stage error = %v, want %v", stageErrors[0], sentinel)
+	}
+	if !errors.Is(stageErrors[1], context.DeadlineExceeded) {
+		t.Fatalf("stuck stage error = %v, want context deadline exceeded", stageErrors[1])
+	}
+	joined := errors.Join(stageErrors...)
+	if completedIndex, stuckIndex := strings.Index(joined.Error(), "completed:"), strings.Index(joined.Error(), "stuck:"); completedIndex < 0 || stuckIndex <= completedIndex {
+		t.Fatalf("joined error = %q, want stage errors in declaration order", joined)
+	}
+
+	releaseStageOnce()
+	select {
+	case <-stageFinished:
+	case <-time.After(time.Second):
+		t.Fatal("stuck stage did not finish after release")
+	}
+}
+
 func TestShutdownIgnoresCancelledParentDuringCleanup(t *testing.T) {
 	ctx := testContext()
 	parent, cancel := context.WithCancel(ctx.Context)

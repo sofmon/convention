@@ -37,6 +37,10 @@ cancellation is abandoned at the deadline. This is safe only when the caller is
 on a terminal process-shutdown path. Tests must release blocked stages before
 completing so they do not leave permanent goroutines behind.
 
+Each phase records stage outcomes in a synchronized ledger before updating the
+ledger's completion signal. The final snapshot uses the same lock, so outcome
+ordering and completion cannot drift apart.
+
 Callbacks run outside the shutdown deadline and must return promptly. Both
 completion paths restore default signal behavior before shutdown begins, so a
 SIGINT or SIGTERM arriving during shutdown terminates a blocked process whether

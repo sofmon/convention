@@ -73,6 +73,10 @@ If the deadline expires before a stage publishes its result, that stage is
 reported with the context deadline error. An error returned afterward is not
 observed by `Run`.
 
+Internally, each phase records stage outcomes before updating its completion
+signal. Outcome publication and the final snapshot use the same lock, so the
+ledger owns both error ordering and completion.
+
 A stage that ignores cancellation does not block `Run` past the deadline, but
 its goroutine can continue afterward. Use this package only on a terminal
 process-shutdown path, and make shutdown stages honor their context whenever
