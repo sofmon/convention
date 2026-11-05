@@ -54,7 +54,8 @@ func processItem(ctx ctx.Context, item Item) {
 | `ctx.go` | Core Context struct, New(), WrapContext(), Agent() |
 | `scope.go` | WithScope(), WithScopef(), Scope(), Exit(), wrapErr() |
 | `workflow.go` | Workflow type, WithWorkflow(), WithNewWorkflow() |
-| `log.go` | Logger(), WithLogger(), defaultLogger() |
+| `log.go` | Logger(), LoggerKeys(), WithLogger(), defaultLogger() |
+| `log_guard.go` | keyGuard slog.Handler wrapper that renames repeated JSON keys |
 | `env.go` | Environment type, Environment(), IsProdEnv() |
 | `http.go` | HTTP integration, WithRequest(), Request(), headers |
 | `claims.go` | WithClaims(), Claims(), User() |
@@ -91,6 +92,19 @@ type Environment string
 ## Logger Keys (for structured logs)
 
 - `env`, `agent`, `workflow`, `user`, `scope`, `action`, `now`, `use_agent_claims`
+- Exported as `LoggerKeys() []string` (a fresh slice, in this order). Keep it in sync when adding a logger key.
+- `defaultLogger()` also writes the slog built-ins `time`, `level`, `msg` and `source`.
+
+## Log Key Guard
+
+`defaultLogger()` wraps its `slog.JSONHandler` in `keyGuard` (`log_guard.go`) because slog does not deduplicate keys and a repeated key in one JSON line makes fluent-bit drop the line or corrupt the value.
+
+- Reserved at the top level: `time`, `level`, `msg`, `source`. Keys added by `With`/`WithAttrs` are tracked per object level (`WithGroup` opens a new level).
+- A colliding attribute key is renamed `attr_<key>`, or `attr_attr_<key>` if that is also taken. The earlier value keeps the original key. A group name is renamed the same way.
+- Attributes inside a nested `slog.Group("g", ...)` are checked only against that group. A group with an empty key is inlined into the current level.
+- With no collision the record is passed through unchanged (output identical to the plain handler).
+- Loggers passed to `WithLogger()` are used as given and are NOT guarded.
+- The guard is immutable: derived handlers copy their key sets.
 
 ## Code Generation Rules
 

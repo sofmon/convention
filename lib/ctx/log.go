@@ -11,14 +11,32 @@ import (
 
 func defaultLogger() *slog.Logger {
 	return slog.New(
-		slog.NewJSONHandler(
-			os.Stdout,
-			&slog.HandlerOptions{
-				Level:     slog.LevelInfo,
-				AddSource: true,
-			},
+		newKeyGuard(
+			slog.NewJSONHandler(
+				os.Stdout,
+				&slog.HandlerOptions{
+					Level:     slog.LevelInfo,
+					AddSource: true,
+				},
+			),
 		),
 	)
+}
+
+// LoggerKeys returns the top-level keys that every Logger() line may carry, in
+// declaration order. Attributes must not reuse them, nor the slog built-ins
+// time, level, msg and source.
+func LoggerKeys() []string {
+	return []string{
+		loggerKeyEnv,
+		loggerKeyAgent,
+		loggerKeyWorkflow,
+		loggerKeyUser,
+		loggerKeyScope,
+		loggerKeyAction,
+		loggerKeyNow,
+		loggerKeyUseAgentClaims,
+	}
 }
 
 func (ctx Context) Logger() *slog.Logger {

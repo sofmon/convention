@@ -97,6 +97,10 @@ The context carries a structured logger (`*slog.Logger`) that automatically incl
 - `user` - Current user
 - `scope` - Current scope chain
 - `action` - Current action (e.g., "GET /api/users")
+- `now` - Time override, when set
+- `use_agent_claims` - Present when agent claims are in use
+
+`ctx.LoggerKeys()` returns these eight keys (a new slice on each call, in this order). Together with slog's own `time`, `level`, `msg` and `source`, they are the top-level keys of a log line.
 
 ```go
 ctx.Logger().Info("processing request", "itemCount", len(items))
@@ -106,6 +110,19 @@ ctx.Logger().Debug("detailed info", "state", state)
 // Add custom logger
 ctx = ctx.WithLogger(customLogger)
 ```
+
+#### Key collisions
+
+slog does not deduplicate keys, and log agents such as fluent-bit drop or corrupt a line that repeats a key. The default logger therefore renames an attribute whose key is already used at the same level of the JSON object:
+
+```go
+ctx.Logger().Info("saved", "action", "put", "source", "x")
+// {"time":...,"level":"INFO","source":{...},"msg":"saved","action":"GET /api/users","attr_action":"put","attr_source":"x"}
+```
+
+- The earlier value keeps its key; the later one becomes `attr_<key>` (`attr_attr_<key>` if that is taken too). This also applies to a key repeated within one call and to `With`/`WithGroup` names.
+- Attributes inside a nested `slog.Group` are checked only against that group.
+- Loggers passed to `WithLogger` are used as given and are not guarded.
 
 ### Workflow Tracking
 
