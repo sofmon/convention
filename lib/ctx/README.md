@@ -122,7 +122,7 @@ ctx.Logger().Info("saved", "action", "put", "source", "x")
 
 - No JSON object at any depth of a line repeats a key.
 - The first occurrence keeps its key; each later repeat becomes `attr_<key>` (`attr_attr_<key>` if that is taken too). Key order is kept.
-- Values are never changed. A line without repeats is written exactly as slog produced it.
+- Values are never changed. A line is written exactly as slog produced it, except for the `attr_` prefixes inserted into repeated keys.
 - Loggers passed to `WithLogger` are used as given and are not protected.
 
 ### Workflow Tracking

@@ -102,9 +102,10 @@ type Environment string
 
 - `slog.JSONHandler` writes each record with exactly one `Write` call (one JSON object plus `\n`, under a mutex shared by all derived handlers), so the writer sees whole lines.
 - Guarantee: no JSON object at any depth of a line written by the default logger repeats a key. This holds for whatever the handler produced (LogValuers, empty keys, invalid UTF-8 keys, `json.RawMessage` values), because the writer checks the encoded output, not the attributes.
-- Fast path: `cleanLine` (`log_scan.go`) scans each line without allocating and compares raw key bytes. A clean line is written as is. The slow path (`encoding/json` rebuild) runs only for a line with a repeat or one the scanner cannot vouch for (keys with a backslash escape or invalid UTF-8, objects over 64 keys, nesting over 512, malformed input).
-- Rename rule: the first occurrence keeps its key; each later repeat in the same object becomes `attr_<key>`, or `attr_attr_<key>` if that is also taken, and so on. Key order is kept.
-- Values are never touched. A line without repeats is written byte for byte as the handler produced it. A line with repeats is re-encoded: numbers keep their text, HTML is not escaped, string escaping is normalised.
+- Fast path: `cleanLine` (`log_scan.go`) scans each line without allocating and compares raw key bytes. A clean line is written as is.
+- Slow path: for a line with a repeat, or one the fast scan cannot vouch for (keys with a backslash escape or invalid UTF-8, objects over 64 keys, nesting over 512), the scanner runs again in slow mode, comparing keys by their decoded value as `encoding/json` does (invalid UTF-8 and lone surrogates decode to U+FFFD). A per-object map remembers the next `attr_` depth to try per key, so many repeats stay linear in candidate checks.
+- Rename rule: the first occurrence keeps its key; each later repeat in the same object gets `attr_` (repeated as needed until unique) inserted right after the opening quote of its key token, so the key's own escapes and bytes are kept. Key order is kept.
+- Values are never touched: nothing is decoded or re-encoded except key tokens for comparison. The output equals the input byte for byte except for the inserted `attr_` prefixes.
 - Input that is not exactly one JSON object is passed through unchanged. Destination errors are returned.
 - The writer is stateless and does not retain the buffer it is given, so it is safe for concurrent use.
 - Loggers passed to `WithLogger()` are used as given and are NOT protected.

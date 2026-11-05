@@ -416,6 +416,14 @@ func TestDedupeWriter(t *testing.T) {
 		`{"l":[{"k":1,"k":2},[{"k":3,"k":4}]],"n":null}` + "\n":          `{"l":[{"k":1,"attr_k":2},[{"k":3,"attr_k":4}]],"n":null}` + "\n",
 		`{"a":12345678901234567890,"a":1.50,"b":true,"c":-0.0e5}` + "\n": `{"a":12345678901234567890,"attr_a":1.50,"b":true,"c":-0.0e5}` + "\n",
 		`{"h":"<&>","h":"é\n"}` + "\n":                                   `{"h":"<&>","attr_h":"é\n"}` + "\n",
+		`{"k":1,"k":2,"s":"\ud800"}` + "\n":                              `{"k":1,"attr_k":2,"s":"\ud800"}` + "\n",
+		"{\"k\":1,\"k\":2,\"s\":\"\xff\"}\n":                             "{\"k\":1,\"attr_k\":2,\"s\":\"\xff\"}\n",
+		`{"k":1,"\u006b":2}`:                                             `{"k":1,"attr_\u006b":2}`,
+		`{"\u006b":1,"k":2}`:                                             `{"\u006b":1,"attr_k":2}`,
+		`{"\ud83d\ude00":1,"😀":2}`:                                       `{"\ud83d\ude00":1,"attr_😀":2}`,
+		`{"\ud800":1,"\ud801":2}`:                                        `{"\ud800":1,"attr_\ud801":2}`,
+		"{\"\xff\":1,\"\xfe\":2}":                                        "{\"\xff\":1,\"attr_\xfe\":2}",
+		`{"o":{"k":1,"\u006b":2,"k":3}}`:                                 `{"o":{"k":1,"attr_\u006b":2,"attr_attr_k":3}}`,
 	}
 	for in, want := range rewritten {
 		got, n, err := write(in)
@@ -526,4 +534,41 @@ func BenchmarkDefaultLoggerCollision(b *testing.B) {
 	r := benchRecord()
 	r.AddAttrs(slog.String("source", "x"), slog.String("env", "y"))
 	benchHandler(b, h, r)
+}
+
+func BenchmarkDedupeManyDuplicates(b *testing.B) {
+	line := []byte("{" + strings.TrimSuffix(strings.Repeat(`"k":1,`, 1000), ",") + "}\n")
+	w := newDedupeWriter(io.Discard)
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if _, err := w.Write(line); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func TestDedupeWriter_DeepAndBigObjects(t *testing.T) {
+	deep := strings.Repeat(`{"o":`, 600) + `{"k":1,"k":2}` + strings.Repeat("}", 600)
+	var out bytes.Buffer
+	if _, err := newDedupeWriter(&out).Write([]byte(deep)); err != nil {
+		t.Fatal(err)
+	}
+	if want := strings.Replace(deep, `"k":2`, `"attr_k":2`, 1); out.String() != want {
+		t.Fatalf("deep: got %.60q", out.String())
+	}
+
+	var b strings.Builder
+	b.WriteString("{")
+	for i := 0; i < 200; i++ {
+		b.WriteString(`"k":1,`)
+	}
+	b.WriteString(`"x":1}`)
+	out.Reset()
+	if _, err := newDedupeWriter(&out).Write([]byte(b.String())); err != nil {
+		t.Fatal(err)
+	}
+	m := decodeStrict(t, out.String())
+	if len(m) != 201 {
+		t.Fatalf("got %d keys", len(m))
+	}
 }

@@ -2,36 +2,67 @@ package ctx
 
 import (
 	"bytes"
+	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf16"
 	"unicode/utf8"
 )
 
 const (
-	maxScanDepth = 512
-	maxScanKeys  = 64 // per object; more keys are left to the slow path
+	maxScanDepth = 512   // fast mode; deeper lines go to the slow mode
+	maxDepth     = 10000 // slow mode, the limit of encoding/json
+	maxScanKeys  = 64    // per object in fast mode; bigger objects go to the slow mode
 )
 
-// scanner is the allocation-free fast check for dedupeWriter. It walks one JSON
-// object and reports whether it is valid and repeats no key. It answers false
-// whenever it cannot be sure, and the caller then takes the slow path, which
-// decides for real: keys holding an escape or invalid UTF-8 (equal keys can be
-// spelled differently), big objects, deep nesting, and any malformed input.
+// scanner walks one JSON object without decoding values, in one of two modes.
+//
+// Fast mode is allocation-free: it answers whether the line is valid and
+// repeats no key, comparing raw key bytes, and answers false whenever it cannot
+// be sure (keys holding an escape or invalid UTF-8, big or deep objects,
+// malformed input).
+//
+// Slow mode compares keys by their decoded value, as encoding/json does, and
+// records where each repeated key needs an attr_ prefix. It never changes a
+// value, and a key keeps its own escapes.
 type scanner struct {
-	p     []byte
-	i     int
-	keys  [][2]int // spans into p of the keys of the open objects
-	esc   bool     // the last string held a backslash
-	hiBit bool     // the last string held a byte >= 0x80
+	p        []byte
+	i        int
+	slow     bool
+	maxDepth int
+	keys     [][2]int // fast: spans into p of the keys of the open objects
+	renames  []rename // slow: in document order
+	esc      bool     // the last string held a backslash
+	hiBit    bool     // the last string held a byte >= 0x80
 }
+
+// rename says: insert depth repetitions of "attr_" at offset at, just inside
+// the opening quote of a key.
+type rename struct{ at, depth int }
 
 var scanners = sync.Pool{New: func() any { return new(scanner) }}
 
-// cleanLine reports whether p is exactly one JSON object, with optional
-// surrounding whitespace, and no object in it repeats a key.
+func (s *scanner) reset(p []byte, slow bool) {
+	s.p, s.i, s.slow = p, 0, slow
+	s.keys, s.renames = s.keys[:0], s.renames[:0]
+	s.maxDepth = maxScanDepth
+	if slow {
+		s.maxDepth = maxDepth
+	}
+}
+
+// scan reports whether p is exactly one JSON object, with optional surrounding
+// whitespace. In fast mode it also requires that no object repeats a key.
+func (s *scanner) scan(p []byte, slow bool) bool {
+	s.reset(p, slow)
+	return s.skipSpace() && s.p[s.i] == '{' && s.object(0) && !s.skipSpace()
+}
+
+// cleanLine reports whether p is exactly one JSON object and no object in it
+// repeats a key, as far as the fast scan can tell.
 func cleanLine(p []byte) bool {
 	s := scanners.Get().(*scanner)
-	s.p, s.i, s.keys = p, 0, s.keys[:0]
-	ok := s.skipSpace() && s.p[s.i] == '{' && s.object(0) && !s.skipSpace()
+	ok := s.scan(p, false)
 	s.p = nil // never retain the caller's buffer
 	scanners.Put(s)
 	return ok
@@ -89,11 +120,12 @@ func (s *scanner) value(depth int) bool {
 }
 
 func (s *scanner) object(depth int) bool {
-	if depth > maxScanDepth {
+	if depth > s.maxDepth {
 		return false
 	}
 	s.i++ // {
 	base := len(s.keys)
+	var names keyNames
 
 	if s.skipSpace() && s.p[s.i] == '}' {
 		s.i++
@@ -104,16 +136,25 @@ func (s *scanner) object(depth int) bool {
 			return false
 		}
 		start, end, ok := s.str()
-		if !ok || s.esc || (s.hiBit && !utf8.Valid(s.p[start:end])) || len(s.keys)-base >= maxScanKeys {
+		if !ok {
 			return false
 		}
-		key := s.p[start:end]
-		for _, k := range s.keys[base:] {
-			if bytes.Equal(key, s.p[k[0]:k[1]]) {
+		if s.slow {
+			if depth := names.add(decodeKey(s.p[start:end])); depth > 0 {
+				s.renames = append(s.renames, rename{start, depth})
+			}
+		} else {
+			if s.esc || (s.hiBit && !utf8.Valid(s.p[start:end])) || len(s.keys)-base >= maxScanKeys {
 				return false
 			}
+			key := s.p[start:end]
+			for _, k := range s.keys[base:] {
+				if bytes.Equal(key, s.p[k[0]:k[1]]) {
+					return false
+				}
+			}
+			s.keys = append(s.keys, [2]int{start, end})
 		}
-		s.keys = append(s.keys, [2]int{start, end})
 
 		if !s.expect(':') || !s.value(depth) {
 			return false
@@ -134,7 +175,7 @@ func (s *scanner) object(depth int) bool {
 }
 
 func (s *scanner) array(depth int) bool {
-	if depth > maxScanDepth {
+	if depth > s.maxDepth {
 		return false
 	}
 	s.i++ // [
@@ -250,4 +291,111 @@ func (s *scanner) digits() bool {
 		s.i++
 	}
 	return s.i > start
+}
+
+// keyNames tracks the decoded keys of one object in slow mode.
+type keyNames struct {
+	seen map[string]struct{}
+	// next maps a decoded key to the first attr_ depth not yet known to be
+	// taken, so each repeat costs one candidate check however many came before.
+	next map[string]int
+}
+
+// add records key and returns how many attr_ prefixes it needs to be unique
+// among the keys of the object (0 for none).
+func (n *keyNames) add(key string) int {
+	if n.seen == nil {
+		n.seen, n.next = map[string]struct{}{}, map[string]int{}
+	}
+	if _, taken := n.seen[key]; !taken {
+		n.seen[key] = struct{}{}
+		return 0
+	}
+	depth := n.next[key]
+	if depth == 0 {
+		depth = 1
+	}
+	for {
+		candidate := strings.Repeat("attr_", depth) + key
+		if _, taken := n.seen[candidate]; !taken {
+			n.seen[candidate] = struct{}{}
+			n.next[key] = depth + 1
+			return depth
+		}
+		depth++
+	}
+}
+
+// decodeKey decodes the inside of a JSON string exactly as encoding/json does:
+// invalid UTF-8 and lone surrogates become U+FFFD. raw must be a string the
+// scanner accepted, so its escapes are well formed.
+func decodeKey(raw []byte) string {
+	if bytes.IndexByte(raw, '\\') < 0 && utf8.Valid(raw) {
+		return string(raw)
+	}
+	b := make([]byte, 0, len(raw))
+	for i := 0; i < len(raw); {
+		c := raw[i]
+		switch {
+		case c == '\\' && raw[i+1] == 'u':
+			r := hex4(raw[i+2 : i+6])
+			i += 6
+			if utf16.IsSurrogate(r) {
+				paired := false
+				if i+6 <= len(raw) && raw[i] == '\\' && raw[i+1] == 'u' {
+					if dec := utf16.DecodeRune(r, hex4(raw[i+2:i+6])); dec != unicode.ReplacementChar {
+						r, paired = dec, true
+						i += 6
+					}
+				}
+				if !paired {
+					r = unicode.ReplacementChar
+				}
+			}
+			b = utf8.AppendRune(b, r)
+		case c == '\\':
+			b = append(b, unescape(raw[i+1]))
+			i += 2
+		case c < utf8.RuneSelf:
+			b = append(b, c)
+			i++
+		default:
+			r, size := utf8.DecodeRune(raw[i:])
+			b = utf8.AppendRune(b, r)
+			i += size
+		}
+	}
+	return string(b)
+}
+
+func unescape(c byte) byte {
+	switch c {
+	case 'b':
+		return '\b'
+	case 'f':
+		return '\f'
+	case 'n':
+		return '\n'
+	case 'r':
+		return '\r'
+	case 't':
+		return '\t'
+	}
+	return c // " \ /
+}
+
+func hex4(h []byte) rune {
+	var r rune
+	for _, c := range h {
+		switch {
+		case c >= 'a':
+			c -= 'a' - 10
+		case c >= 'A':
+			c -= 'A' - 10
+		default:
+			c -= '0'
+		}
+		r = r<<4 | rune(c)
+	}
+	return r
 }
