@@ -167,14 +167,14 @@ func TestDedupe_WithChains(t *testing.T) {
 	if _, ok := m["source"].(map[string]any); !ok {
 		t.Fatalf("source: %v", m["source"])
 	}
-	if m["attr_source"] != float64(1) || m["attr_attr_source"] != float64(2) || m["attr_attr_attr_source"] != float64(3) {
+	if m["attr_source"] != float64(1) || m["attr_attr_source"] != float64(2) || m["attr2_source"] != float64(3) {
 		t.Fatalf("got %v", m)
 	}
 
 	m = logOne(t,
 		func(l *slog.Logger) *slog.Logger { return l.With("k", 1).With("k", 2) },
 		func(l *slog.Logger) { l.Info("m", "k", 3) })
-	if m["k"] != float64(1) || m["attr_k"] != float64(2) || m["attr_attr_k"] != float64(3) {
+	if m["k"] != float64(1) || m["attr_k"] != float64(2) || m["attr2_k"] != float64(3) {
 		t.Fatalf("got %v", m)
 	}
 }
@@ -291,7 +291,7 @@ func (groupValuer) LogValue() slog.Value {
 
 func TestDedupe_LogValuerGroup(t *testing.T) {
 	m := logOne(t, nil, func(l *slog.Logger) { l.Info("m", slog.Any("", groupValuer{})) })
-	if m["attr_source"] != float64(1) || m["attr_attr_source"] != float64(2) {
+	if m["attr_source"] != float64(1) || m["attr2_source"] != float64(2) {
 		t.Fatalf("inlined valuer: %v", m)
 	}
 	m = logOne(t, nil, func(l *slog.Logger) { l.Info("m", "v", groupValuer{}) })
@@ -410,8 +410,9 @@ func TestDedupeWriter(t *testing.T) {
 
 	rewritten := map[string]string{
 		`{"a":1,"a":2}` + "\n":                                           `{"a":1,"attr_a":2}` + "\n",
-		`{"a":1,"attr_a":2,"a":3}` + "\n":                                `{"a":1,"attr_a":2,"attr_attr_a":3}` + "\n",
+		`{"a":1,"attr_a":2,"a":3}` + "\n":                                `{"a":1,"attr_a":2,"attr2_a":3}` + "\n",
 		`{"a":1,"a":2,"attr_a":3}` + "\n":                                `{"a":1,"attr_a":2,"attr_attr_a":3}` + "\n",
+		`{"a":1,"a":2,"a":3,"attr2_a":4,"a":5}`:                          `{"a":1,"attr_a":2,"attr2_a":3,"attr_attr2_a":4,"attr3_a":5}`,
 		`{"o":{"k":1,"k":2},"k":1}` + "\n":                               `{"o":{"k":1,"attr_k":2},"k":1}` + "\n",
 		`{"l":[{"k":1,"k":2},[{"k":3,"k":4}]],"n":null}` + "\n":          `{"l":[{"k":1,"attr_k":2},[{"k":3,"attr_k":4}]],"n":null}` + "\n",
 		`{"a":12345678901234567890,"a":1.50,"b":true,"c":-0.0e5}` + "\n": `{"a":12345678901234567890,"attr_a":1.50,"b":true,"c":-0.0e5}` + "\n",
@@ -423,7 +424,7 @@ func TestDedupeWriter(t *testing.T) {
 		`{"\ud83d\ude00":1,"😀":2}`:                                       `{"\ud83d\ude00":1,"attr_😀":2}`,
 		`{"\ud800":1,"\ud801":2}`:                                        `{"\ud800":1,"attr_\ud801":2}`,
 		"{\"\xff\":1,\"\xfe\":2}":                                        "{\"\xff\":1,\"attr_\xfe\":2}",
-		`{"o":{"k":1,"\u006b":2,"k":3}}`:                                 `{"o":{"k":1,"attr_\u006b":2,"attr_attr_k":3}}`,
+		`{"o":{"k":1,"\u006b":2,"k":3}}`:                                 `{"o":{"k":1,"attr_\u006b":2,"attr2_k":3}}`,
 	}
 	for in, want := range rewritten {
 		got, n, err := write(in)
@@ -570,5 +571,85 @@ func TestDedupeWriter_DeepAndBigObjects(t *testing.T) {
 	m := decodeStrict(t, out.String())
 	if len(m) != 201 {
 		t.Fatalf("got %d keys", len(m))
+	}
+}
+
+func TestDedupeWriter_NestingBeyondDecoderLimit(t *testing.T) {
+	in := `{"k":1,"k":2,"d":` + strings.Repeat("[", 10001) + "0" + strings.Repeat("]", 10001) + "}\n"
+	var out bytes.Buffer
+	if _, err := newDedupeWriter(&out).Write([]byte(in)); err != nil {
+		t.Fatal(err)
+	}
+	if want := strings.Replace(in, `"k":2`, `"attr_k":2`, 1); out.String() != want {
+		t.Fatalf("not deduplicated: %.60q", out.String())
+	}
+}
+
+type shortWriter struct {
+	n   int
+	got []byte
+}
+
+func (w *shortWriter) Write(p []byte) (int, error) {
+	if len(p) <= w.n {
+		w.got = append(w.got, p...)
+		return len(p), nil
+	}
+	w.got = append(w.got, p[:w.n]...)
+	return w.n, errors.New("short")
+}
+
+func TestDedupeWriter_PartialWriteReportsInputBytes(t *testing.T) {
+	// Output: {"k":1,"attr_k":2,"attr2_k":3}\n; "attr_" is output bytes 8..12.
+	in := `{"k":1,"k":2,"k":3}` + "\n"
+	wantOut := `{"k":1,"attr_k":2,"attr2_k":3}` + "\n"
+	for _, tc := range []struct{ accept, want int }{
+		{0, 0},
+		{7, 7},   // before any insertion
+		{8, 8},   // right at the first insertion
+		{10, 8},  // inside the first inserted prefix
+		{13, 8},  // the whole prefix, no input byte after it
+		{14, 9},  // one input byte after it
+		{19, 14}, // right at the second insertion
+		{21, 14}, // inside the second prefix "attr2_"
+		{25, 14}, // the whole second prefix
+		{26, 15},
+		{len(wantOut) - 1, len(in) - 1},
+	} {
+		w := &shortWriter{n: tc.accept}
+		got, err := newDedupeWriter(w).Write([]byte(in))
+		if err == nil || got != tc.want {
+			t.Errorf("accept %d: got %d, %v; want %d, error", tc.accept, got, err, tc.want)
+		}
+		if string(w.got) != wantOut[:tc.accept] {
+			t.Errorf("accept %d: wrote %q", tc.accept, w.got)
+		}
+	}
+
+	var out bytes.Buffer
+	if n, err := newDedupeWriter(&out).Write([]byte(in)); err != nil || n != len(in) || out.String() != wantOut {
+		t.Fatalf("full write: %d, %v, %q", n, err, out.String())
+	}
+}
+
+func BenchmarkDedupeOverlappingChain(b *testing.B) {
+	var sb strings.Builder
+	sb.WriteString("{")
+	for pass := 0; pass < 2; pass++ {
+		for i := 0; i < 256; i++ {
+			if pass > 0 || i > 0 {
+				sb.WriteString(",")
+			}
+			sb.WriteString(`"` + strings.Repeat("attr_", i) + `k":1`)
+		}
+	}
+	sb.WriteString("}\n")
+	line := []byte(sb.String())
+	w := newDedupeWriter(io.Discard)
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if _, err := w.Write(line); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

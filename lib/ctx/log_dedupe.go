@@ -51,14 +51,36 @@ func (d dedupeWriter) Write(p []byte) (int, error) {
 	prev := 0
 	for _, r := range s.renames {
 		buf.Write(p[prev:r.at])
-		for i := 0; i < r.depth; i++ {
-			buf.WriteString("attr_")
-		}
+		buf.WriteString(prefix(r.n))
 		prev = r.at
 	}
 	buf.Write(p[prev:])
-	if _, err := d.w.Write(buf.Bytes()); err != nil {
-		return 0, err
+
+	m, err := d.w.Write(buf.Bytes())
+	if err == nil && m < buf.Len() {
+		err = io.ErrShortWrite
+	}
+	if err != nil {
+		return inputBytesWritten(s.renames, m), err
 	}
 	return len(p), nil
+}
+
+// inputBytesWritten maps m bytes of spliced output back to the number of
+// original input bytes they hold. An inserted prefix that was only partly
+// written counts for nothing.
+func inputBytesWritten(renames []rename, m int) int {
+	inserted := 0
+	for _, r := range renames {
+		at := r.at + inserted // where this prefix starts in the output
+		if m <= at {
+			break
+		}
+		n := len(prefix(r.n))
+		if m < at+n {
+			return r.at
+		}
+		inserted += n
+	}
+	return m - inserted
 }

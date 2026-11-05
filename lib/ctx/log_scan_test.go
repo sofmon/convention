@@ -3,6 +3,8 @@ package ctx
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -106,85 +108,141 @@ func TestCleanLine_DoesNotAllocate(t *testing.T) {
 	}
 }
 
-// repeatsKey is the oracle: it uses encoding/json to find a repeated key in
-// any object of data, which must be exactly one JSON object.
-func repeatsKey(data []byte) (repeats, isObject bool) {
-	if !json.Valid(data) {
-		return false, false
-	}
+// newDecoder decodes numbers as json.Number so an out-of-range number is not
+// an error.
+func newDecoder(data []byte) *json.Decoder {
 	dec := json.NewDecoder(bytes.NewReader(data))
-	if tok, err := dec.Token(); err != nil || tok != json.Delim('{') {
-		return false, false
+	dec.UseNumber()
+	return dec
+}
+
+// isObject reports whether data is valid JSON whose top level is an object.
+func isObject(data []byte) bool {
+	if !json.Valid(data) {
+		return false
 	}
-	return repeatsIn(dec), true
+	tok, err := newDecoder(data).Token()
+	return err == nil && tok == json.Delim('{')
+}
+
+// repeatsKey is the oracle: it uses encoding/json to find a repeated key in
+// any object of data, which must be a valid JSON object.
+func repeatsKey(t *testing.T, data []byte) bool {
+	t.Helper()
+	dec := newDecoder(data)
+	if _, err := dec.Token(); err != nil {
+		t.Fatalf("oracle: %v", err)
+	}
+	return repeatsIn(t, dec)
 }
 
 // repeatsIn consumes the rest of an object whose '{' was already read.
-func repeatsIn(dec *json.Decoder) bool {
+func repeatsIn(t *testing.T, dec *json.Decoder) bool {
+	t.Helper()
 	rep := false
 	seen := map[string]bool{}
 	for dec.More() {
-		kt, _ := dec.Token()
+		kt, err := dec.Token()
+		if err != nil {
+			t.Fatalf("oracle: %v", err)
+		}
 		k := kt.(string)
 		rep = rep || seen[k]
 		seen[k] = true
-		rep = repeatsValue(dec) || rep
+		rep = repeatsValue(t, dec) || rep
 	}
-	dec.Token() // }
+	if _, err := dec.Token(); err != nil { // }
+		t.Fatalf("oracle: %v", err)
+	}
 	return rep
 }
 
-func repeatsValue(dec *json.Decoder) bool {
-	tok, _ := dec.Token()
+func repeatsValue(t *testing.T, dec *json.Decoder) bool {
+	t.Helper()
+	tok, err := dec.Token()
+	if err != nil {
+		t.Fatalf("oracle: %v", err)
+	}
 	switch tok {
 	case json.Delim('{'):
-		return repeatsIn(dec)
+		return repeatsIn(t, dec)
 	case json.Delim('['):
 		rep := false
 		for dec.More() {
-			rep = repeatsValue(dec) || rep
+			rep = repeatsValue(t, dec) || rep
 		}
-		dec.Token() // ]
+		if _, err := dec.Token(); err != nil { // ]
+			t.Fatalf("oracle: %v", err)
+		}
 		return rep
 	}
 	return false
 }
 
 type rawToken struct {
+	gap   string // bytes between the previous token and this one
 	raw   string
 	isKey bool
 }
 
-// rawTokens returns the raw bytes of every token of valid JSON, with object
-// keys marked, using the decoder's offsets.
-func rawTokens(data []byte) []rawToken {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	var out []rawToken
+// rawTokens returns every token of valid JSON with the bytes before it and
+// whether it is an object key, plus the bytes after the last token. It uses
+// the decoder's offsets, so it is independent of the scanner.
+func rawTokens(t *testing.T, data []byte) (tokens []rawToken, tail string) {
+	t.Helper()
+	dec := newDecoder(data)
 	type frame struct{ obj, key bool }
 	var stack []frame
 	prev := int64(0)
 	for {
 		tok, err := dec.Token()
+		if err == io.EOF {
+			return tokens, string(data[prev:])
+		}
 		if err != nil {
-			return out
+			t.Fatalf("oracle: %v", err)
 		}
-		off := dec.InputOffset()
-		raw := string(bytes.Trim(data[prev:off], " \t\r\n,:"))
-		prev = off
-		isKey := len(stack) > 0 && stack[len(stack)-1].obj && stack[len(stack)-1].key
-		out = append(out, rawToken{raw, isKey})
+		chunk := data[prev:dec.InputOffset()]
+		raw := bytes.TrimLeft(chunk, " \t\r\n,:")
+		gap := string(chunk[:len(chunk)-len(raw)])
+		prev = dec.InputOffset()
+
 		d, isDelim := tok.(json.Delim)
-		if isDelim && (d == '{' || d == '[') {
+		switch {
+		case isDelim && (d == '{' || d == '['):
+			tokens = append(tokens, rawToken{gap, string(raw), false})
 			stack = append(stack, frame{obj: d == '{', key: d == '{'})
-			continue
-		}
-		if isDelim { // closing delimiter
+		case isDelim:
+			tokens = append(tokens, rawToken{gap, string(raw), false})
 			stack = stack[:len(stack)-1]
-		}
-		if n := len(stack); n > 0 && stack[n-1].obj {
-			stack[n-1].key = !isKey
+			if n := len(stack); n > 0 && stack[n-1].obj {
+				stack[n-1].key = true
+			}
+		default:
+			top := &stack[len(stack)-1]
+			isKey := top.obj && top.key
+			tokens = append(tokens, rawToken{gap, string(raw), isKey})
+			if top.obj {
+				top.key = !isKey
+			}
 		}
 	}
+}
+
+// isRenamedKey reports whether got is in with attr_ or attr<n>_ (n >= 2)
+// inserted right after the opening quote.
+func isRenamedKey(in, got string) bool {
+	if !strings.HasSuffix(got, in[1:]) || len(got) <= len(in) {
+		return false
+	}
+	prefix := got[1 : len(got)-len(in)+1]
+	if prefix == "attr_" {
+		return true
+	}
+	digits, ok := strings.CutPrefix(prefix, "attr")
+	digits, ok2 := strings.CutSuffix(digits, "_")
+	n, err := strconv.Atoi(digits)
+	return ok && ok2 && err == nil && n >= 2 && strconv.Itoa(n) == digits
 }
 
 func FuzzDedupeWriter(f *testing.F) {
@@ -194,7 +252,10 @@ func FuzzDedupeWriter(f *testing.F) {
 		`{"a":1,"a":2}` + "\n",
 		`{"a":1,"\u0061":2}`,
 		`{"o":{"k":1,"k":2},"k":1,"l":[{"x":1,"x":2}]}`,
+		`{"o":{},"k":1,"k":2}`,
+		`{"a":1e999,"k":1,"k":2}`,
 		`{"a":1,"attr_a":2,"a":3}`,
+		`{"a":1,"a":2,"attr_a":3,"attr2_a":4,"a":5}`,
 		"{\"\xff\":1,\"\xfe\":2}",
 		`{"\ufffd":1,"` + "\xff" + `":2}`,
 		`{"k":1,"k":2,"s":"\ud800"}`,
@@ -204,6 +265,7 @@ func FuzzDedupeWriter(f *testing.F) {
 		`{"a":"{\"a\":1,\"a\":2}","a":1.50e3}`,
 		`{"":1,"":2}`,
 		` {"a":1,"a":2} `,
+		"\t{ \"a\" : 1 ,\n\"a\" : 2 }\r\n\n",
 		`[1,2]`,
 		`{"a":1}{"a":2}`,
 	} {
@@ -215,58 +277,33 @@ func FuzzDedupeWriter(f *testing.F) {
 		if err != nil || n != len(data) {
 			t.Fatalf("Write = %d, %v", n, err)
 		}
+		if !isObject(data) {
+			if !bytes.Equal(out.Bytes(), data) {
+				t.Fatalf("changed input that is not one JSON object:\n in: %q\nout: %q", data, out.Bytes())
+			}
+			return
+		}
 
-		// The strict form: one JSON object, optionally followed by one newline.
-		body := bytes.TrimSuffix(data, []byte("\n"))
-		strict := len(body) > 0 && body[0] == '{' && body[len(body)-1] == '}' && json.Valid(body)
-		if !json.Valid(data) {
-			if !bytes.Equal(out.Bytes(), data) {
-				t.Fatalf("changed malformed input:\n in: %q\nout: %q", data, out.Bytes())
-			}
-			return
+		if !isObject(out.Bytes()) || repeatsKey(t, out.Bytes()) {
+			t.Fatalf("output is not a repeat-free object:\n in: %q\nout: %q", data, out.Bytes())
 		}
-		repeats, isObject := repeatsKey(data)
-		if !isObject {
-			if !bytes.Equal(out.Bytes(), data) {
-				t.Fatalf("changed a non-object:\n in: %q\nout: %q", data, out.Bytes())
-			}
-			return
-		}
-		if !strict {
-			// Padded with whitespace: only the guarantee is checked.
-			if again, _ := repeatsKey(out.Bytes()); again {
-				t.Fatalf("repeat left:\n in: %q\nout: %q", data, out.Bytes())
-			}
-			return
-		}
-		if !repeats {
+		if !repeatsKey(t, data) {
 			if !bytes.Equal(out.Bytes(), data) {
 				t.Fatalf("changed a line without a repeat:\n in: %q\nout: %q", data, out.Bytes())
 			}
 			return
 		}
-		if again, isObject := repeatsKey(out.Bytes()); !isObject || again {
-			t.Fatalf("output is not a repeat-free object:\n in: %q\nout: %q", data, out.Bytes())
-		}
-		if bytes.HasSuffix(out.Bytes(), []byte("\n")) != bytes.HasSuffix(data, []byte("\n")) {
-			t.Fatalf("trailing newline changed: %q -> %q", data, out.Bytes())
-		}
-		in, got := rawTokens(data), rawTokens(out.Bytes())
-		if len(in) != len(got) {
-			t.Fatalf("token count %d -> %d:\n in: %q\nout: %q", len(in), len(got), data, out.Bytes())
+
+		in, inTail := rawTokens(t, data)
+		got, gotTail := rawTokens(t, out.Bytes())
+		if len(in) != len(got) || inTail != gotTail {
+			t.Fatalf("tokens %d -> %d, tail %q -> %q:\n in: %q\nout: %q", len(in), len(got), inTail, gotTail, data, out.Bytes())
 		}
 		for i := range in {
-			if in[i] == got[i] {
-				continue
-			}
-			renamed := in[i].isKey && got[i].isKey && strings.HasPrefix(got[i].raw, `"attr_`) &&
-				strings.HasSuffix(got[i].raw, in[i].raw[1:])
-			if renamed {
-				prefix := got[i].raw[1 : len(got[i].raw)-len(in[i].raw)+1]
-				renamed = prefix != "" && prefix == strings.Repeat("attr_", len(prefix)/len("attr_"))
-			}
-			if !renamed {
-				t.Fatalf("token %d changed %q -> %q:\n in: %q\nout: %q", i, in[i].raw, got[i].raw, data, out.Bytes())
+			same := in[i] == got[i]
+			renamed := in[i].isKey && got[i].isKey && in[i].gap == got[i].gap && isRenamedKey(in[i].raw, got[i].raw)
+			if !same && !renamed {
+				t.Fatalf("token %d changed %+v -> %+v:\n in: %q\nout: %q", i, in[i], got[i], data, out.Bytes())
 			}
 		}
 	})

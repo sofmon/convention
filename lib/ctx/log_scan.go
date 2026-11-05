@@ -2,7 +2,7 @@ package ctx
 
 import (
 	"bytes"
-	"strings"
+	"strconv"
 	"sync"
 	"unicode"
 	"unicode/utf16"
@@ -10,52 +10,49 @@ import (
 )
 
 const (
-	maxScanDepth = 512   // fast mode; deeper lines go to the slow mode
-	maxDepth     = 10000 // slow mode, the limit of encoding/json
-	maxScanKeys  = 64    // per object in fast mode; bigger objects go to the slow mode
+	maxScanDepth = 512 // fast mode; deeper lines go to the slow mode
+	maxScanKeys  = 64  // per object in fast mode; bigger objects go to the slow mode
 )
 
 // scanner walks one JSON object without decoding values, in one of two modes.
 //
-// Fast mode is allocation-free: it answers whether the line is valid and
-// repeats no key, comparing raw key bytes, and answers false whenever it cannot
-// be sure (keys holding an escape or invalid UTF-8, big or deep objects,
-// malformed input).
+// Fast mode is allocation-free and recursive: it answers whether the line is
+// valid and repeats no key, comparing raw key bytes, and answers false
+// whenever it cannot be sure (keys holding an escape or invalid UTF-8, big or
+// deep objects, malformed input).
 //
 // Slow mode compares keys by their decoded value, as encoding/json does, and
-// records where each repeated key needs an attr_ prefix. It never changes a
-// value, and a key keeps its own escapes.
+// records where each repeated key needs a prefix. It keeps an explicit stack,
+// so nesting depth is limited only by memory, and it never changes a value;
+// a key keeps its own escapes.
 type scanner struct {
-	p        []byte
-	i        int
-	slow     bool
-	maxDepth int
-	keys     [][2]int // fast: spans into p of the keys of the open objects
-	renames  []rename // slow: in document order
-	esc      bool     // the last string held a backslash
-	hiBit    bool     // the last string held a byte >= 0x80
+	p       []byte
+	i       int
+	keys    [][2]int // fast: spans into p of the keys of the open objects
+	stack   []frame  // slow: the open containers
+	renames []rename // slow: in document order
+	esc     bool     // the last string held a backslash
+	hiBit   bool     // the last string held a byte >= 0x80
 }
 
-// rename says: insert depth repetitions of "attr_" at offset at, just inside
-// the opening quote of a key.
-type rename struct{ at, depth int }
+// rename says: insert the prefix numbered n at offset at, just inside the
+// opening quote of a key. See keyNames.prefix.
+type rename struct{ at, n int }
 
 var scanners = sync.Pool{New: func() any { return new(scanner) }}
-
-func (s *scanner) reset(p []byte, slow bool) {
-	s.p, s.i, s.slow = p, 0, slow
-	s.keys, s.renames = s.keys[:0], s.renames[:0]
-	s.maxDepth = maxScanDepth
-	if slow {
-		s.maxDepth = maxDepth
-	}
-}
 
 // scan reports whether p is exactly one JSON object, with optional surrounding
 // whitespace. In fast mode it also requires that no object repeats a key.
 func (s *scanner) scan(p []byte, slow bool) bool {
-	s.reset(p, slow)
-	return s.skipSpace() && s.p[s.i] == '{' && s.object(0) && !s.skipSpace()
+	s.p, s.i = p, 0
+	s.keys, s.renames, s.stack = s.keys[:0], s.renames[:0], s.stack[:0]
+	if !s.skipSpace() || s.p[s.i] != '{' {
+		return false
+	}
+	if slow {
+		return s.scanSlow() && !s.skipSpace()
+	}
+	return s.object(0) && !s.skipSpace()
 }
 
 // cleanLine reports whether p is exactly one JSON object and no object in it
@@ -100,32 +97,36 @@ func (s *scanner) value(depth int) bool {
 	if !s.skipSpace() {
 		return false
 	}
-	switch c := s.p[s.i]; {
-	case c == '{':
+	switch s.p[s.i] {
+	case '{':
 		return s.object(depth + 1)
-	case c == '[':
+	case '[':
 		return s.array(depth + 1)
-	case c == '"':
+	}
+	return s.scalar()
+}
+
+func (s *scanner) scalar() bool {
+	switch s.p[s.i] {
+	case '"':
 		_, _, ok := s.str()
 		return ok
-	case c == 't':
+	case 't':
 		return s.literal("true")
-	case c == 'f':
+	case 'f':
 		return s.literal("false")
-	case c == 'n':
+	case 'n':
 		return s.literal("null")
-	default:
-		return s.number()
 	}
+	return s.number()
 }
 
 func (s *scanner) object(depth int) bool {
-	if depth > s.maxDepth {
+	if depth > maxScanDepth {
 		return false
 	}
 	s.i++ // {
 	base := len(s.keys)
-	var names keyNames
 
 	if s.skipSpace() && s.p[s.i] == '}' {
 		s.i++
@@ -136,30 +137,18 @@ func (s *scanner) object(depth int) bool {
 			return false
 		}
 		start, end, ok := s.str()
-		if !ok {
+		if !ok || s.esc || (s.hiBit && !utf8.Valid(s.p[start:end])) || len(s.keys)-base >= maxScanKeys {
 			return false
 		}
-		if s.slow {
-			if depth := names.add(decodeKey(s.p[start:end])); depth > 0 {
-				s.renames = append(s.renames, rename{start, depth})
-			}
-		} else {
-			if s.esc || (s.hiBit && !utf8.Valid(s.p[start:end])) || len(s.keys)-base >= maxScanKeys {
+		key := s.p[start:end]
+		for _, k := range s.keys[base:] {
+			if bytes.Equal(key, s.p[k[0]:k[1]]) {
 				return false
 			}
-			key := s.p[start:end]
-			for _, k := range s.keys[base:] {
-				if bytes.Equal(key, s.p[k[0]:k[1]]) {
-					return false
-				}
-			}
-			s.keys = append(s.keys, [2]int{start, end})
 		}
+		s.keys = append(s.keys, [2]int{start, end})
 
-		if !s.expect(':') || !s.value(depth) {
-			return false
-		}
-		if !s.skipSpace() {
+		if !s.expect(':') || !s.value(depth) || !s.skipSpace() {
 			return false
 		}
 		c := s.p[s.i]
@@ -175,7 +164,7 @@ func (s *scanner) object(depth int) bool {
 }
 
 func (s *scanner) array(depth int) bool {
-	if depth > s.maxDepth {
+	if depth > maxScanDepth {
 		return false
 	}
 	s.i++ // [
@@ -293,37 +282,135 @@ func (s *scanner) digits() bool {
 	return s.i > start
 }
 
+type frameState uint8
+
+const (
+	stStart      frameState = iota // just opened
+	stNeedKey                      // after a comma in an object
+	stNeedValue                    // after a comma in an array
+	stAfterValue                   // after a value: a comma or the closing delimiter
+)
+
+type frame struct {
+	obj   bool
+	state frameState
+	names keyNames
+}
+
+// scanSlow scans the object whose '{' is at s.i, checking the JSON grammar
+// and collecting renames, with an explicit stack instead of recursion.
+func (s *scanner) scanSlow() bool {
+	s.i++
+	s.stack = append(s.stack, frame{obj: true})
+	for len(s.stack) > 0 {
+		f := &s.stack[len(s.stack)-1]
+		if !s.skipSpace() {
+			return false
+		}
+		c := s.p[s.i]
+
+		closer := byte(']')
+		if f.obj {
+			closer = '}'
+		}
+		switch f.state {
+		case stAfterValue:
+			s.i++
+			switch c {
+			case ',':
+				f.state = stNeedValue
+				if f.obj {
+					f.state = stNeedKey
+				}
+			case closer:
+				s.pop()
+			default:
+				return false
+			}
+			continue
+		case stStart:
+			if c == closer {
+				s.i++
+				s.pop()
+				continue
+			}
+		}
+
+		if f.obj {
+			if c != '"' {
+				return false
+			}
+			start, end, ok := s.str()
+			if !ok {
+				return false
+			}
+			if n := f.names.add(decodeKey(s.p[start:end])); n > 0 {
+				s.renames = append(s.renames, rename{start, n})
+			}
+			if !s.expect(':') || !s.skipSpace() {
+				return false
+			}
+			c = s.p[s.i]
+		}
+
+		f.state = stAfterValue
+		if c == '{' || c == '[' {
+			s.i++
+			s.stack = append(s.stack, frame{obj: c == '{'}) // f is stale from here
+			continue
+		}
+		if !s.scalar() {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *scanner) pop() {
+	s.stack[len(s.stack)-1] = frame{} // drop the key map
+	s.stack = s.stack[:len(s.stack)-1]
+}
+
 // keyNames tracks the decoded keys of one object in slow mode.
 type keyNames struct {
 	seen map[string]struct{}
-	// next maps a decoded key to the first attr_ depth not yet known to be
-	// taken, so each repeat costs one candidate check however many came before.
-	next map[string]int
+	// next is the number tried next for attr<n>_: one counter per object that
+	// only grows, so every failed attempt is charged to a distinct existing key
+	// and renaming stays linear.
+	next int
 }
 
-// add records key and returns how many attr_ prefixes it needs to be unique
-// among the keys of the object (0 for none).
-func (n *keyNames) add(key string) int {
-	if n.seen == nil {
-		n.seen, n.next = map[string]struct{}{}, map[string]int{}
+// add records key and returns the prefix number it needs to be unique among
+// the keys of the object: 0 for none, 1 for "attr_", n >= 2 for "attr<n>_".
+func (k *keyNames) add(key string) int {
+	if k.seen == nil {
+		k.seen = map[string]struct{}{}
+		k.next = 2
 	}
-	if _, taken := n.seen[key]; !taken {
-		n.seen[key] = struct{}{}
+	if _, taken := k.seen[key]; !taken {
+		k.seen[key] = struct{}{}
 		return 0
 	}
-	depth := n.next[key]
-	if depth == 0 {
-		depth = 1
+	if _, taken := k.seen[prefix(1)+key]; !taken {
+		k.seen[prefix(1)+key] = struct{}{}
+		return 1
 	}
 	for {
-		candidate := strings.Repeat("attr_", depth) + key
-		if _, taken := n.seen[candidate]; !taken {
-			n.seen[candidate] = struct{}{}
-			n.next[key] = depth + 1
-			return depth
+		n := k.next
+		k.next++
+		if _, taken := k.seen[prefix(n)+key]; !taken {
+			k.seen[prefix(n)+key] = struct{}{}
+			return n
 		}
-		depth++
 	}
+}
+
+// prefix returns "attr_" for n == 1 and "attr<n>_" for n >= 2.
+func prefix(n int) string {
+	if n == 1 {
+		return "attr_"
+	}
+	return "attr" + strconv.Itoa(n) + "_"
 }
 
 // decodeKey decodes the inside of a JSON string exactly as encoding/json does:
