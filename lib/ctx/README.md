@@ -113,16 +113,17 @@ ctx = ctx.WithLogger(customLogger)
 
 #### Key collisions
 
-slog does not deduplicate keys, and log agents such as fluent-bit drop or corrupt a line that repeats a key. The default logger therefore renames an attribute whose key is already used at the same level of the JSON object:
+slog does not deduplicate keys, and log agents such as fluent-bit drop or corrupt a line that repeats a key. The default logger therefore writes through a wrapper that renames a repeated key in the encoded line:
 
 ```go
 ctx.Logger().Info("saved", "action", "put", "source", "x")
 // {"time":...,"level":"INFO","source":{...},"msg":"saved","action":"GET /api/users","attr_action":"put","attr_source":"x"}
 ```
 
-- The earlier value keeps its key; the later one becomes `attr_<key>` (`attr_attr_<key>` if that is taken too). This also applies to a key repeated within one call and to `With`/`WithGroup` names.
-- Attributes inside a nested `slog.Group` are checked only against that group.
-- Loggers passed to `WithLogger` are used as given and are not guarded.
+- No JSON object at any depth of a line repeats a key.
+- The first occurrence keeps its key; each later repeat becomes `attr_<key>` (`attr_attr_<key>` if that is taken too). Key order is kept.
+- Values are never changed. A line without repeats is written exactly as slog produced it.
+- Loggers passed to `WithLogger` are used as given and are not protected.
 
 ### Workflow Tracking
 

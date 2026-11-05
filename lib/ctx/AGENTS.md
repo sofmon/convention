@@ -55,7 +55,8 @@ func processItem(ctx ctx.Context, item Item) {
 | `scope.go` | WithScope(), WithScopef(), Scope(), Exit(), wrapErr() |
 | `workflow.go` | Workflow type, WithWorkflow(), WithNewWorkflow() |
 | `log.go` | Logger(), LoggerKeys(), WithLogger(), defaultLogger() |
-| `log_guard.go` | keyGuard slog.Handler wrapper that renames repeated JSON keys |
+| `log_scan.go` | allocation-free scanner: is a line one JSON object with no repeated key? |
+| `log_dedupe.go` | dedupeWriter: io.Writer that renames repeated JSON keys in each log line |
 | `env.go` | Environment type, Environment(), IsProdEnv() |
 | `http.go` | HTTP integration, WithRequest(), Request(), headers |
 | `claims.go` | WithClaims(), Claims(), User() |
@@ -95,16 +96,18 @@ type Environment string
 - Exported as `LoggerKeys() []string` (a fresh slice, in this order). Keep it in sync when adding a logger key.
 - `defaultLogger()` also writes the slog built-ins `time`, `level`, `msg` and `source`.
 
-## Log Key Guard
+## Log Key Dedupe Writer
 
-`defaultLogger()` wraps its `slog.JSONHandler` in `keyGuard` (`log_guard.go`) because slog does not deduplicate keys and a repeated key in one JSON line makes fluent-bit drop the line or corrupt the value.
+`defaultLogger()` is `newDefaultLogger(os.Stdout)`: a `slog.JSONHandler` whose destination is wrapped by `dedupeWriter` (`log_dedupe.go`). slog does not deduplicate keys, and a repeated key in one JSON line makes fluent-bit drop the line or corrupt the value.
 
-- Reserved at the top level: `time`, `level`, `msg`, `source`. Keys added by `With`/`WithAttrs` are tracked per object level (`WithGroup` opens a new level).
-- A colliding attribute key is renamed `attr_<key>`, or `attr_attr_<key>` if that is also taken. The earlier value keeps the original key. A group name is renamed the same way.
-- Attributes inside a nested `slog.Group("g", ...)` are checked only against that group. A group with an empty key is inlined into the current level.
-- With no collision the record is passed through unchanged (output identical to the plain handler).
-- Loggers passed to `WithLogger()` are used as given and are NOT guarded.
-- The guard is immutable: derived handlers copy their key sets.
+- `slog.JSONHandler` writes each record with exactly one `Write` call (one JSON object plus `\n`, under a mutex shared by all derived handlers), so the writer sees whole lines.
+- Guarantee: no JSON object at any depth of a line written by the default logger repeats a key. This holds for whatever the handler produced (LogValuers, empty keys, invalid UTF-8 keys, `json.RawMessage` values), because the writer checks the encoded output, not the attributes.
+- Fast path: `cleanLine` (`log_scan.go`) scans each line without allocating and compares raw key bytes. A clean line is written as is. The slow path (`encoding/json` rebuild) runs only for a line with a repeat or one the scanner cannot vouch for (keys with a backslash escape or invalid UTF-8, objects over 64 keys, nesting over 512, malformed input).
+- Rename rule: the first occurrence keeps its key; each later repeat in the same object becomes `attr_<key>`, or `attr_attr_<key>` if that is also taken, and so on. Key order is kept.
+- Values are never touched. A line without repeats is written byte for byte as the handler produced it. A line with repeats is re-encoded: numbers keep their text, HTML is not escaped, string escaping is normalised.
+- Input that is not exactly one JSON object is passed through unchanged. Destination errors are returned.
+- The writer is stateless and does not retain the buffer it is given, so it is safe for concurrent use.
+- Loggers passed to `WithLogger()` are used as given and are NOT protected.
 
 ## Code Generation Rules
 
