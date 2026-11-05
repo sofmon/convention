@@ -108,6 +108,33 @@ func TestCleanLine_DoesNotAllocate(t *testing.T) {
 	}
 }
 
+// maxJSONDepth is encoding/json's nesting limit.
+const maxJSONDepth = 10000
+
+// nestingDepth returns the deepest nesting of [ and { outside strings.
+func nestingDepth(data []byte) int {
+	depth, max := 0, 0
+	inString := false
+	for i := 0; i < len(data); i++ {
+		c := data[i]
+		switch {
+		case inString && c == '\\':
+			i++
+		case c == '"':
+			inString = !inString
+		case inString:
+		case c == '[' || c == '{':
+			depth++
+			if depth > max {
+				max = depth
+			}
+		case c == ']' || c == '}':
+			depth--
+		}
+	}
+	return max
+}
+
 // newDecoder decodes numbers as json.Number so an out-of-range number is not
 // an error.
 func newDecoder(data []byte) *json.Decoder {
@@ -268,6 +295,7 @@ func FuzzDedupeWriter(f *testing.F) {
 		"\t{ \"a\" : 1 ,\n\"a\" : 2 }\r\n\n",
 		`[1,2]`,
 		`{"a":1}{"a":2}`,
+		`{"k":1,"k":2,"d":` + strings.Repeat("[", 10001) + "0" + strings.Repeat("]", 10001) + "}\n",
 	} {
 		f.Add([]byte(s))
 	}
@@ -276,6 +304,9 @@ func FuzzDedupeWriter(f *testing.F) {
 		n, err := newDedupeWriter(&out).Write(data)
 		if err != nil || n != len(data) {
 			t.Fatalf("Write = %d, %v", n, err)
+		}
+		if nestingDepth(data) > maxJSONDepth {
+			return // encoding/json cannot decode it, so the oracle cannot judge it
 		}
 		if !isObject(data) {
 			if !bytes.Equal(out.Bytes(), data) {
@@ -307,4 +338,76 @@ func FuzzDedupeWriter(f *testing.F) {
 			}
 		}
 	})
+}
+
+func TestPutScanner(t *testing.T) {
+	s := &scanner{}
+	for i := 0; i < 5; i++ {
+		var f frame
+		f.names.add("a")
+		s.stack = append(s.stack, f)
+	}
+	s.stack = s.stack[:2] // frames beyond len are still reachable
+	if !putScanner(s) {
+		t.Fatal("small scanner was not pooled")
+	}
+	for i, f := range s.stack[:cap(s.stack)] {
+		if f.names.seen != nil {
+			t.Fatalf("frame %d keeps its key map", i)
+		}
+	}
+
+	for name, big := range map[string]*scanner{
+		"frames":  {stack: make([]frame, 0, maxPooledFrames+1)},
+		"keys":    {keys: make([][2]int, 0, maxPooledSpans+1)},
+		"renames": {renames: make([]rename, 0, maxPooledSpans+1)},
+	} {
+		if putScanner(big) {
+			t.Errorf("scanner with oversized %s was pooled", name)
+		}
+	}
+}
+
+func TestScannerPool_BoundedAfterHugeLines(t *testing.T) {
+	var many strings.Builder
+	many.WriteString("{")
+	for i := 0; i < 1_000_000; i++ {
+		many.WriteString(`"k":1,`)
+	}
+	many.WriteString(`"x":1}` + "\n")
+
+	for name, line := range map[string]string{
+		"1M repeats":          many.String(),
+		"100000 open objects": strings.Repeat(`{"k":`, 100000),
+		"small malformed":     `{"a":{"b":{"c":`,
+	} {
+		if _, err := newDedupeWriter(io.Discard).Write([]byte(line)); err != nil {
+			t.Fatal(err)
+		}
+		s := scanners.Get().(*scanner)
+		if cap(s.stack) > maxPooledFrames || cap(s.keys) > maxPooledSpans || cap(s.renames) > maxPooledSpans {
+			t.Errorf("%s: pooled scanner has caps stack=%d keys=%d renames=%d", name, cap(s.stack), cap(s.keys), cap(s.renames))
+		}
+		for i, f := range s.stack[:cap(s.stack)] {
+			if f.names.seen != nil {
+				t.Errorf("%s: frame %d keeps its key map", name, i)
+				break
+			}
+		}
+		scanners.Put(s)
+	}
+}
+
+func TestNestingDepth(t *testing.T) {
+	for in, want := range map[string]int{
+		`{}`:                       1,
+		`{"a":[[1],{"b":2}]}`:      3,
+		`{"a":"[[[{{{\"[["}`:       1,
+		`{"a":"\\","b":[1]}`:       2,
+		strings.Repeat("[", 10001): 10001,
+	} {
+		if got := nestingDepth([]byte(in)); got != want {
+			t.Errorf("%.30q: got %d want %d", in, got, want)
+		}
+	}
 }

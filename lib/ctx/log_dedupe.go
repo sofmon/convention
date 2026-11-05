@@ -28,14 +28,14 @@ type dedupeWriter struct {
 
 func newDedupeWriter(w io.Writer) io.Writer { return dedupeWriter{w} }
 
+// A line buffer that grew beyond this is not pooled.
+const maxPooledBuffer = 64 << 10
+
 var lineBuffers = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 
 func (d dedupeWriter) Write(p []byte) (int, error) {
 	s := scanners.Get().(*scanner)
-	defer func() {
-		s.p = nil // never retain the caller's buffer
-		scanners.Put(s)
-	}()
+	defer putScanner(s)
 
 	if s.scan(p, false) || !s.scan(p, true) || len(s.renames) == 0 {
 		return d.w.Write(p)
@@ -44,7 +44,7 @@ func (d dedupeWriter) Write(p []byte) (int, error) {
 	buf := lineBuffers.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer func() {
-		if buf.Cap() <= 64<<10 {
+		if buf.Cap() <= maxPooledBuffer {
 			lineBuffers.Put(buf)
 		}
 	}()

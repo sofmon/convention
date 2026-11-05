@@ -41,6 +41,26 @@ type rename struct{ at, n int }
 
 var scanners = sync.Pool{New: func() any { return new(scanner) }}
 
+// A scanner whose buffers grew beyond these is not pooled.
+const (
+	maxPooledFrames = 1024
+	maxPooledSpans  = 4096 // keys and renames, 16 bytes each
+)
+
+// putScanner returns s to the pool and reports whether it did. It drops the
+// references the scanner holds (the caller's buffer, and the key maps of frames
+// an aborted scan left open) and refuses a scanner whose buffers a huge line
+// grew, so one such line does not pin memory.
+func putScanner(s *scanner) bool {
+	s.p = nil
+	clear(s.stack[:cap(s.stack)])
+	if cap(s.stack) > maxPooledFrames || cap(s.keys) > maxPooledSpans || cap(s.renames) > maxPooledSpans {
+		return false
+	}
+	scanners.Put(s)
+	return true
+}
+
 // scan reports whether p is exactly one JSON object, with optional surrounding
 // whitespace. In fast mode it also requires that no object repeats a key.
 func (s *scanner) scan(p []byte, slow bool) bool {
@@ -60,8 +80,7 @@ func (s *scanner) scan(p []byte, slow bool) bool {
 func cleanLine(p []byte) bool {
 	s := scanners.Get().(*scanner)
 	ok := s.scan(p, false)
-	s.p = nil // never retain the caller's buffer
-	scanners.Put(s)
+	putScanner(s)
 	return ok
 }
 

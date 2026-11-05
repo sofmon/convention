@@ -108,6 +108,7 @@ type Environment string
 - Values are never touched: nothing is decoded or re-encoded except key tokens for comparison. The output equals the input byte for byte except for the inserted prefixes.
 - Input that is not exactly one JSON object is passed through unchanged. Destination errors are returned; after a partial write of a spliced line, `Write` returns the number of input bytes that the written output holds (a partly written inserted prefix counts for nothing).
 - The writer is stateless and does not retain the buffer it is given, so it is safe for concurrent use.
+- Scanners and line buffers are pooled. `putScanner` clears the key maps of every frame and refuses a scanner whose stack exceeds 1024 frames or whose key or rename storage exceeds 4096 entries; line buffers over 64 KB are dropped too, so one huge line does not pin memory.
 - Loggers passed to `WithLogger()` are used as given and are NOT protected.
 
 ## Code Generation Rules
