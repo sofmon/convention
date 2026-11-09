@@ -7,8 +7,10 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -500,6 +502,27 @@ func TestLoggerKeys(t *testing.T) {
 	}
 	if !reflect.DeepEqual(LoggerKeys(), want) {
 		t.Fatal("mutating the result affected the next call")
+	}
+}
+
+func TestLoggerKeys_MatchLoggerOutput(t *testing.T) {
+	var buf bytes.Buffer
+	New(convAuth.Claims{User: "u"}).
+		WithLogger(newDefaultLogger(&buf)).
+		WithScope("sc").
+		WithAction(convAuth.Action("GET /x")).
+		WithNow(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)).
+		WithAgentClaims().
+		Logger().Info("m")
+
+	line := decodeStrict(t, strings.TrimSpace(buf.String()))
+	for _, builtin := range []string{slog.TimeKey, slog.LevelKey, slog.SourceKey, slog.MessageKey} {
+		delete(line, builtin)
+	}
+	got := slices.Sorted(maps.Keys(line))
+	want := slices.Sorted(slices.Values(LoggerKeys()))
+	if !slices.Equal(got, want) {
+		t.Fatalf("Logger() wrote %v, LoggerKeys() returns %v", got, want)
 	}
 }
 

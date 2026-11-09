@@ -9,6 +9,9 @@ import (
 	"testing"
 )
 
+// cleanLine reports whether the fast scan accepts p.
+func cleanLine(p []byte) bool { return new(scanner).scan(p, false) }
+
 func TestCleanLine(t *testing.T) {
 	deep := func(n int) string {
 		return strings.Repeat(`{"k":`, n) + "1" + strings.Repeat("}", n)
@@ -100,10 +103,14 @@ func TestCleanLine(t *testing.T) {
 	}
 }
 
-func TestCleanLine_DoesNotAllocate(t *testing.T) {
+func TestScanFastMode_DoesNotAllocate(t *testing.T) {
 	p := []byte(`{"time":"t","level":"INFO","source":{"function":"f","file":"x.go","line":1},"msg":"m","a":[1,{"k":2}],"b":{"k":3}}` + "\n")
-	cleanLine(p) // warm the pool
-	if n := testing.AllocsPerRun(100, func() { cleanLine(p) }); n != 0 {
+	// Not through the pool: under -race, sync.Pool drops items at random.
+	s := new(scanner)
+	if !s.scan(p, false) { // also grows keys once
+		t.Fatal("line not clean")
+	}
+	if n := testing.AllocsPerRun(100, func() { s.scan(p, false) }); n != 0 {
 		t.Fatalf("allocs = %v", n)
 	}
 }

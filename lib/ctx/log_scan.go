@@ -36,7 +36,7 @@ type scanner struct {
 }
 
 // rename says: insert the prefix numbered n at offset at, just inside the
-// opening quote of a key. See keyNames.prefix.
+// opening quote of a key. See prefix.
 type rename struct{ at, n int }
 
 var scanners = sync.Pool{New: func() any { return new(scanner) }}
@@ -73,15 +73,6 @@ func (s *scanner) scan(p []byte, slow bool) bool {
 		return s.scanSlow() && !s.skipSpace()
 	}
 	return s.object(0) && !s.skipSpace()
-}
-
-// cleanLine reports whether p is exactly one JSON object and no object in it
-// repeats a key, as far as the fast scan can tell.
-func cleanLine(p []byte) bool {
-	s := scanners.Get().(*scanner)
-	ok := s.scan(p, false)
-	putScanner(s)
-	return ok
 }
 
 func (s *scanner) peek() byte {
